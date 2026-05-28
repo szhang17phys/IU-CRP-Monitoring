@@ -25,7 +25,7 @@ from pymodbus.client import ModbusTcpClient
 COUNTER_IP   = '10.66.66.68'
 PORT         = 502
 
-BASE_DIR     = '/home/rraut/particle_plus/dashboard'   # git repo = working dir
+BASE_DIR     = '/home/rraut/particle_plus'   # git repo root on noether
 OUTPUT_CSV   = f'{BASE_DIR}/particle_data_archive.csv'
 LIVE_CSV     = f'{BASE_DIR}/particle_data_live.csv'
 LOG_FILE     = f'{BASE_DIR}/sync_log.txt'
@@ -40,7 +40,7 @@ CYCLES              = 1       # 1 sample per cycle then hold
 ERASE_AFTER_SYNC    = False   # set True after verifying data
 MIN_RECORDS_TO_SYNC = 1
 
-# github — script lives inside the repo, so repo dir = BASE_DIR
+# github — repo root = BASE_DIR so index.html lands at root (GitHub Pages)
 GITHUB_REPO_DIR     = BASE_DIR
 GITHUB_BRANCH       = 'main'
 GITHUB_REMOTE       = 'origin'

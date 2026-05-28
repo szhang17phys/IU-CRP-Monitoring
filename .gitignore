@@ -1,9 +1,11 @@
 # Runtime data — large, always changing, not tracked
-# Leading / means root-level only (won't affect dashboard/data/)
 /particle_data.csv
 /particle_data_archive.csv
 /particle_data_live.csv
 /sync_log.txt
+
+# Old dashboard subdirectory (now generated at repo root instead)
+dashboard/
 
 # Python
 __pycache__/
