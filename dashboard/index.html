@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="refresh" content="1800">  <!-- auto-refresh every 30min -->
+<title>Wright Lab — Particle Counter Dashboard</title>
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<style>
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    margin: 0;
+    padding: 20px;
+  }
+  h1 {
+    color: #58a6ff;
+    border-bottom: 1px solid #30363d;
+    padding-bottom: 10px;
+  }
+  .subtitle {
+    color: #8b949e;
+    font-size: 0.9em;
+    margin-top: -10px;
+    margin-bottom: 20px;
+  }
+  .card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+  }
+  .updated {
+    color: #8b949e;
+    font-size: 0.8em;
+    text-align: right;
+  }
+  .status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .stat {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 15px;
+    text-align: center;
+  }
+  .stat-value {
+    font-size: 2em;
+    font-weight: bold;
+    color: #58a6ff;
+  }
+  .stat-label {
+    font-size: 0.8em;
+    color: #8b949e;
+    margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+
+<h1>🔬 Wright Lab — Particle Counter</h1>
+<p class="subtitle">
+  Particles Plus 7000 Series | Last 24 hours | 
+  Sampling every 30 minutes
+</p>
+
+<!-- Status cards -->
+<div class="status-grid">
+  <div class="stat">
+    <div class="stat-value" id="last-temp">--</div>
+    <div class="stat-label">Temperature (°C)</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" id="last-rh">--</div>
+    <div class="stat-label">Humidity (%)</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">0</div>
+    <div class="stat-label">Samples (24hr)</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" id="last-ch1">--</div>
+    <div class="stat-label">Latest ch1 /m³</div>
+  </div>
+</div>
+
+<!-- Particle counts chart -->
+<div class="card">
+  <div id="plot-particles" style="height:450px;"></div>
+</div>
+
+<!-- Temperature + RH chart -->
+<div class="card">
+  <div id="plot-env" style="height:300px;"></div>
+</div>
+
+<p class="updated">Last updated: 2026-05-28 13:49:11 (UTC) — auto-refreshes every 30 min</p>
+
+<script>
+const timestamps = [];
+const temp       = [];
+const rh         = [];
+
+// update stat cards with most recent values
+if (temp.length > 0)  document.getElementById('last-temp').innerText =
+    temp.filter(v => v !== null).slice(-1)[0] ?? '--';
+if (rh.length > 0)    document.getElementById('last-rh').innerText =
+    rh.filter(v => v !== null).slice(-1)[0] ?? '--';
+
+// particle counts plot
+const particleTraces = [
+        {
+            x: [],
+            y: [],
+            name: 'ch1 (≥?µm) diff/m³',
+            type: 'scatter',
+            mode: 'lines+markers',
+            line: {width: 1.5},
+            marker: {size: 4}
+        },
+        {
+            x: [],
+            y: [],
+            name: 'ch2 (≥?µm) diff/m³',
+            type: 'scatter',
+            mode: 'lines+markers',
+            line: {width: 1.5},
+            marker: {size: 4}
+        },
+        {
+            x: [],
+            y: [],
+            name: 'ch3 (≥?µm) diff/m³',
+            type: 'scatter',
+            mode: 'lines+markers',
+            line: {width: 1.5},
+            marker: {size: 4}
+        },
+        {
+            x: [],
+            y: [],
+            name: 'ch4 (≥?µm) diff/m³',
+            type: 'scatter',
+            mode: 'lines+markers',
+            line: {width: 1.5},
+            marker: {size: 4}
+        },
+        {
+            x: [],
+            y: [],
+            name: 'ch5 (≥?µm) diff/m³',
+            type: 'scatter',
+            mode: 'lines+markers',
+            line: {width: 1.5},
+            marker: {size: 4}
+        },
+        {
+            x: [],
+            y: [],
+            name: 'ch6 (≥?µm) diff/m³',
+            type: 'scatter',
+            mode: 'lines+markers',
+            line: {width: 1.5},
+            marker: {size: 4}
+        },];
+
+const particleLayout = {
+  title: 'Particle Counts (differential, per m³) — Last 24 Hours',
+  paper_bgcolor: '#161b22',
+  plot_bgcolor:  '#0d1117',
+  font:   {color: '#c9d1d9'},
+  xaxis:  {gridcolor: '#30363d', title: 'Time'},
+  yaxis:  {gridcolor: '#30363d', title: 'Particles / m³'},
+  legend: {bgcolor: '#161b22', bordercolor: '#30363d', borderwidth: 1},
+  margin: {t: 50, b: 80, l: 80, r: 20}
+};
+
+Plotly.newPlot('plot-particles', particleTraces, particleLayout,
+               {responsive: true});
+
+// update ch1 stat card
+const ch1vals = particleTraces[0]?.y ?? [];
+const lastCh1 = ch1vals.filter(v => v !== null).slice(-1)[0];
+if (lastCh1 !== undefined)
+  document.getElementById('last-ch1').innerText = lastCh1.toFixed(1);
+
+// env plot
+const envTraces = [
+  {
+    x: timestamps, y: temp,
+    name: 'Temperature (°C)',
+    type: 'scatter', mode: 'lines+markers',
+    line: {color: '#ff7b72', width: 1.5},
+    marker: {size: 4},
+    yaxis: 'y1'
+  },
+  {
+    x: timestamps, y: rh,
+    name: 'Humidity (%)',
+    type: 'scatter', mode: 'lines+markers',
+    line: {color: '#79c0ff', width: 1.5},
+    marker: {size: 4},
+    yaxis: 'y2'
+  }
+];
+
+const envLayout = {
+  title: 'Temperature & Humidity — Last 24 Hours',
+  paper_bgcolor: '#161b22',
+  plot_bgcolor:  '#0d1117',
+  font:   {color: '#c9d1d9'},
+  xaxis:  {gridcolor: '#30363d'},
+  yaxis:  {gridcolor: '#30363d', title: 'Temperature (°C)',
+            titlefont: {color: '#ff7b72'}},
+  yaxis2: {title: 'Humidity (%)', titlefont: {color: '#79c0ff'},
+            overlaying: 'y', side: 'right', gridcolor: '#30363d'},
+  legend: {bgcolor: '#161b22'},
+  margin: {t: 50, b: 80, l: 80, r: 80}
+};
+
+Plotly.newPlot('plot-env', envTraces, envLayout, {responsive: true});
+</script>
+</body>
+</html>
