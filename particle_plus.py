@@ -313,8 +313,8 @@ def generate_dashboard_html(csv_path, output_path):
             reader = csv.DictReader(f)
             rows = list(reader)
 
-    # filter last 7 days — try counter date/time, then sync_time/snapshot_time fallback
-    cutoff = datetime.now() - timedelta(days=7)
+    # filter last 2 days — try counter date/time, then sync_time/snapshot_time fallback
+    cutoff = datetime.now() - timedelta(days=2)
     recent = []
     for row in rows:
         dt = None
@@ -439,6 +439,29 @@ def generate_dashboard_html(csv_path, output_path):
         else:
             timestamps.append(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
+    # ── gap-marker post-processing ───────────────────────────────────────────
+    # If consecutive timestamps are > 1 hr apart, insert a None-valued sentinel
+    # point one sample-period (HOLD_TIME_S) after the last real point.
+    # This breaks the step chart so no stale value is held across a long gap.
+    _GAP_THRESHOLD_S = 3600
+    _aug_ts  = []
+    _aug_rec = []
+    for _gi in range(len(timestamps)):
+        _aug_ts.append(timestamps[_gi])
+        _aug_rec.append(chart_records[_gi])
+        if _gi + 1 < len(timestamps):
+            try:
+                _dt_a = datetime.strptime(timestamps[_gi],     '%Y-%m-%d %H:%M:%S')
+                _dt_b = datetime.strptime(timestamps[_gi + 1], '%Y-%m-%d %H:%M:%S')
+                if (_dt_b - _dt_a).total_seconds() > _GAP_THRESHOLD_S:
+                    _gap_ts = (_dt_a + timedelta(seconds=HOLD_TIME_S)).strftime('%Y-%m-%d %H:%M:%S')
+                    _aug_ts.append(_gap_ts)
+                    _aug_rec.append(None)   # sentinel — renders as blank in Plotly
+            except Exception:
+                pass
+    _plot_timestamps = _aug_ts
+    _plot_records    = _aug_rec
+
     ch_colors = ['#00b4d8', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6', '#1abc9c']
     pm_colors = ['#ff6b6b', '#ff9f43', '#ffd32a', '#0be881', '#67e8f9', '#c084fc']
 
@@ -448,9 +471,11 @@ def generate_dashboard_html(csv_path, output_path):
         sz = sf(ref.get(f'ch{i}_size_um'))
         ch_sizes[i] = f'{sz:.1f}' if sz is not None else str(i)
 
-    ch_counts = {i: [sf(r.get(f'ch{i}_diff_counts')) for r in chart_records] for i in range(1, 7)}
-    ch_pm     = {i: [sf(r.get(f'ch{i}_pm_ugm3'))     for r in chart_records] for i in range(1, 7)}
-    flow_vals = [sf(r.get('flow_CFM'))         for r in chart_records]
+    ch_counts = {i: [sf(r.get(f'ch{i}_diff_counts')) if r is not None else None
+                     for r in _plot_records] for i in range(1, 7)}
+    ch_pm     = {i: [sf(r.get(f'ch{i}_pm_ugm3'))     if r is not None else None
+                     for r in _plot_records] for i in range(1, 7)}
+    flow_vals = [sf(r.get('flow_CFM')) if r is not None else None for r in _plot_records]
 
     # ── live CSV: counter only stores temp/RH in the live reading (record 0),
     #    not in historical records — read LIVE_CSV for the env chart/cards ──────
@@ -530,16 +555,16 @@ def generate_dashboard_html(csv_path, output_path):
     )
 
     # ── pre-serialise all JS data (avoids f-string brace escaping) ────────────
-    ts_js            = json.dumps(timestamps)
+    ts_js            = json.dumps(_plot_timestamps)
     counts_traces_js = json.dumps([
-        {'x': timestamps, 'y': ch_counts[i],
+        {'x': _plot_timestamps, 'y': ch_counts[i],
          'name': f'\u2265{ch_sizes[i]}\u00b5m',
          'type': 'scatter', 'mode': 'lines',
          'line': {'color': ch_colors[i-1], 'width': 2, 'shape': 'hv'}}
         for i in range(1, 7)
     ])
     pm_traces_js = json.dumps([
-        {'x': timestamps, 'y': ch_pm[i],
+        {'x': _plot_timestamps, 'y': ch_pm[i],
          'name': f'PM\u2265{ch_sizes[i]}\u00b5m',
          'type': 'scatter', 'mode': 'lines',
          'line': {'color': pm_colors[i-1], 'width': 2, 'shape': 'hv'}}
@@ -672,7 +697,7 @@ def generate_dashboard_html(csv_path, output_path):
   <div class="ctrl-group">
     <label>Time Range</label>
     <select id="sel-range" onchange="filterAndRender()">
-      <option value="0" selected>All data (7 days)</option>
+      <option value="0" selected>All data (2 days)</option>
       <option value="30">Last 30 min</option>
       <option value="60">Last 1 hr</option>
       <option value="120">Last 2 hr</option>
@@ -680,7 +705,7 @@ def generate_dashboard_html(csv_path, output_path):
       <option value="360">Last 6 hr</option>
       <option value="720">Last 12 hr</option>
       <option value="1440">Last 24 hr</option>
-      <option value="4320">Last 3 days</option>
+      <option value="2880">Last 2 days</option>
     </select>
   </div>
   <div class="updated">Last pushed: {updated}</div>
