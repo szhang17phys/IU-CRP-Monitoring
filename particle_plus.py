@@ -14,6 +14,7 @@ import struct
 import csv
 import time
 import os
+import signal
 import socket
 import subprocess
 from datetime import datetime, timedelta
@@ -29,6 +30,7 @@ BASE_DIR     = '/home/rraut/particle_plus'   # git repo root on noether
 OUTPUT_CSV   = f'{BASE_DIR}/particle_data_archive.csv'
 LIVE_CSV     = f'{BASE_DIR}/particle_data_live.csv'
 LOG_FILE     = f'{BASE_DIR}/sync_log.txt'
+PID_FILE     = f'{BASE_DIR}/particle_plus.pid'
 
 # sampling schedule
 SAMPLE_TIME_S       = 60      # 1 minute sample
@@ -362,7 +364,8 @@ def generate_dashboard_html(csv_path, output_path):
         return round(c * 9/5 + 32, 1) if c is not None else None
 
     # ── extract data ──────────────────────────────────────────────────────────
-    def get_display_ts(r, fallback_dt):
+    def get_real_ts(r):
+        """Return formatted timestamp string if a real one exists, else None."""
         d = r.get('date', '').strip()
         t = r.get('time', '').strip()
         if d and t:
@@ -374,15 +377,16 @@ def generate_dashboard_html(csv_path, output_path):
                     return datetime.fromisoformat(ts_val).strftime('%Y-%m-%d %H:%M:%S')
                 except Exception:
                     pass
-        return fallback_dt.strftime('%Y-%m-%d %H:%M:%S')
+        return None  # no fake fallback — records without real timestamps are excluded from charts
 
-    # for records with no timestamp, estimate: most recent = now, spaced HOLD_TIME_S apart
-    now_dt = datetime.now()
-    n_rec = len(recent)
-    timestamps = [
-        get_display_ts(r, now_dt - timedelta(seconds=HOLD_TIME_S * (n_rec - 1 - i)))
-        for i, r in enumerate(recent)
-    ]
+    # only include records that have a real timestamp in the time-series charts
+    chart_records = []
+    timestamps = []
+    for r in recent:
+        ts = get_real_ts(r)
+        if ts is not None:
+            chart_records.append(r)
+            timestamps.append(ts)
 
     ch_colors = ['#00b4d8', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6', '#1abc9c']
     pm_colors = ['#ff6b6b', '#ff9f43', '#ffd32a', '#0be881', '#67e8f9', '#c084fc']
@@ -393,9 +397,9 @@ def generate_dashboard_html(csv_path, output_path):
         sz = sf(ref.get(f'ch{i}_size_um'))
         ch_sizes[i] = f'{sz:.1f}' if sz is not None else str(i)
 
-    ch_counts = {i: [sf(r.get(f'ch{i}_diff_counts')) for r in recent] for i in range(1, 7)}
-    ch_pm     = {i: [sf(r.get(f'ch{i}_pm_ugm3'))     for r in recent] for i in range(1, 7)}
-    flow_vals = [sf(r.get('flow_CFM'))         for r in recent]
+    ch_counts = {i: [sf(r.get(f'ch{i}_diff_counts')) for r in chart_records] for i in range(1, 7)}
+    ch_pm     = {i: [sf(r.get(f'ch{i}_pm_ugm3'))     for r in chart_records] for i in range(1, 7)}
+    flow_vals = [sf(r.get('flow_CFM'))         for r in chart_records]
 
     # ── live CSV: counter only stores temp/RH in the live reading (record 0),
     #    not in historical records — read LIVE_CSV for the env chart/cards ──────
@@ -435,7 +439,7 @@ def generate_dashboard_html(csv_path, output_path):
     lv_flow = latest_val('flow_CFM')
     last_flow = f'{lv_flow:.4f}' if lv_flow is not None else '—'
     last_ts   = timestamps[-1] if timestamps else '—'
-    n_samples = len(recent)
+    n_samples = len(chart_records)
 
     laser_ok = latest_bool('laser_ok')
     flow_ok  = latest_bool('flow_ok')
@@ -989,11 +993,18 @@ def mode_all():
 
     log("MODE: --all  (sample + live + dashboard)")
 
-    t_live = threading.Thread(target=mode_live, daemon=True)
-    t_live.start()
+    # write PID so --stop can find and signal this process
+    with open(PID_FILE, 'w') as _pf:
+        _pf.write(str(os.getpid()))
+    try:
+        t_live = threading.Thread(target=mode_live, daemon=True)
+        t_live.start()
 
-    # main thread runs the scheduler (includes dashboard push after each sync)
-    mode_sample()
+        # main thread runs the scheduler (includes dashboard push after each sync)
+        mode_sample()
+    finally:
+        if os.path.exists(PID_FILE):
+            os.remove(PID_FILE)
 
 
 # ─── ENTRY POINT ──────────────────────────────────────────────────────────────
@@ -1011,11 +1022,23 @@ def main():
                         help='Generate HTML and push to GitHub Pages')
     parser.add_argument('--all',       action='store_true',
                         help='Run everything (recommended for tmux)')
+    parser.add_argument('--stop',      action='store_true',
+                        help='Gracefully stop a running --all instance')
     args = parser.parse_args()
 
     os.makedirs(BASE_DIR, exist_ok=True)
 
-    if args.sample:
+    if args.stop:
+        if os.path.exists(PID_FILE):
+            with open(PID_FILE) as _pf:
+                _pid = int(_pf.read().strip())
+            os.kill(_pid, signal.SIGTERM)
+            print(f"Stop signal sent to particle monitor (PID {_pid}).")
+            print("The current sample cycle will finish, then the process will exit.")
+        else:
+            print("No running particle monitor found (no PID file).")
+        return
+    elif args.sample:
         mode_sample()
     elif args.sync:
         mode_sync()
