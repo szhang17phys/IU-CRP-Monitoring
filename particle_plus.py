@@ -380,9 +380,10 @@ def generate_dashboard_html(csv_path, output_path):
                     pass
         return None  # no fake fallback — records without real timestamps are excluded from charts
 
-    # session baseline: records that existed on the counter BEFORE this monitoring session
-    # started — their sync_time is just "when we bulk-read them", not when they were measured.
-    # Only records with record_number > session_baseline have accurate timestamps.
+    # session baseline: records <= baseline were on the counter before this session started;
+    # their sync_time is a bulk-read timestamp, not the actual measurement time.
+    # Approach: session records (> baseline) use their real sync_time; pre-session records
+    # get estimated times by spacing backward at HOLD_TIME_S from the first session record.
     _session_baseline = 0
     if os.path.exists(SESSION_FILE):
         try:
@@ -391,19 +392,52 @@ def generate_dashboard_html(csv_path, output_path):
         except Exception:
             pass
 
-    chart_records = []
-    timestamps = []
+    # collect ALL records (ts may be None if CSV header pre-dates sync_time field)
+    _all_ts = []
     for r in recent:
-        ts = get_real_ts(r)
-        if ts is None:
-            continue
+        ts = get_real_ts(r)  # may be None
         try:
             rec_num = int(float(r.get('record_number', 0) or 0))
         except (ValueError, TypeError):
             rec_num = 0
-        if rec_num > _session_baseline:
-            chart_records.append(r)
-            timestamps.append(ts)
+        _all_ts.append((rec_num, r, ts))
+    _all_ts.sort(key=lambda x: x[0])
+
+    # find anchor: first session record with a real timestamp
+    _anchor_dt = None
+    for _rn, _r, _ts in _all_ts:
+        if _rn > _session_baseline and _ts is not None:
+            try:
+                _anchor_dt = datetime.strptime(_ts, '%Y-%m-%d %H:%M:%S')
+            except Exception:
+                pass
+            break
+    # fallback: last record with any real timestamp
+    if _anchor_dt is None:
+        for _rn, _r, _ts in reversed(_all_ts):
+            if _ts is not None:
+                try:
+                    _anchor_dt = datetime.strptime(_ts, '%Y-%m-%d %H:%M:%S')
+                    break
+                except Exception:
+                    pass
+    # final fallback: if no real timestamps at all, anchor to now
+    if _anchor_dt is None and _all_ts:
+        _anchor_dt = datetime.now()
+
+    chart_records = []
+    timestamps = []
+    for _rn, _r, _ts in _all_ts:
+        chart_records.append(_r)
+        if _rn > _session_baseline and _ts is not None:
+            timestamps.append(_ts)           # accurate sync_time
+        elif _anchor_dt is not None:
+            # estimate: each step is HOLD_TIME_S before the anchor
+            _steps = _session_baseline - _rn + 1 if _rn <= _session_baseline else 0
+            _est = (_anchor_dt - timedelta(seconds=HOLD_TIME_S * _steps)).strftime('%Y-%m-%d %H:%M:%S')
+            timestamps.append(_est)
+        else:
+            timestamps.append(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
     ch_colors = ['#00b4d8', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6', '#1abc9c']
     pm_colors = ['#ff6b6b', '#ff9f43', '#ffd32a', '#0be881', '#67e8f9', '#c084fc']
@@ -501,14 +535,14 @@ def generate_dashboard_html(csv_path, output_path):
         {'x': timestamps, 'y': ch_counts[i],
          'name': f'\u2265{ch_sizes[i]}\u00b5m',
          'type': 'scatter', 'mode': 'lines',
-         'line': {'color': ch_colors[i-1], 'width': 2}}
+         'line': {'color': ch_colors[i-1], 'width': 2, 'shape': 'hv'}}
         for i in range(1, 7)
     ])
     pm_traces_js = json.dumps([
         {'x': timestamps, 'y': ch_pm[i],
          'name': f'PM\u2265{ch_sizes[i]}\u00b5m',
          'type': 'scatter', 'mode': 'lines',
-         'line': {'color': pm_colors[i-1], 'width': 2}}
+         'line': {'color': pm_colors[i-1], 'width': 2, 'shape': 'hv'}}
         for i in range(1, 7)
     ])
     raw_latest = [
@@ -638,14 +672,14 @@ def generate_dashboard_html(csv_path, output_path):
   <div class="ctrl-group">
     <label>Time Range</label>
     <select id="sel-range" onchange="filterAndRender()">
-      <option value="0">All data (7 days)</option>
+      <option value="0" selected>All data (7 days)</option>
       <option value="30">Last 30 min</option>
       <option value="60">Last 1 hr</option>
       <option value="120">Last 2 hr</option>
       <option value="180">Last 3 hr</option>
       <option value="360">Last 6 hr</option>
       <option value="720">Last 12 hr</option>
-      <option value="1440" selected>Last 24 hr</option>
+      <option value="1440">Last 24 hr</option>
       <option value="4320">Last 3 days</option>
     </select>
   </div>
