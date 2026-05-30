@@ -594,6 +594,63 @@ def generate_dashboard_html(csv_path, output_path):
 
     updated = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
+    # ── ISO 14644-1 classification ─────────────────────────────────────────────
+    # Cumulative counts/m³ thresholds per ISO class for each particle size (µm)
+    _ISO_TABLE = {
+        0.3: [(3,102),(4,1020),(5,10200),(6,102000)],
+        0.5: [(3,35),(4,352),(5,3520),(6,35200),(7,352000),(8,3520000),(9,35200000)],
+        1.0: [(3,8),(4,83),(5,832),(6,8320),(7,83200),(8,832000),(9,8320000)],
+        5.0: [(5,29),(6,293),(7,2930),(8,29300),(9,293000)],
+    }
+    _latest_rec = next((r for r in reversed(recent)), None)
+    _iso_class  = None
+    if _latest_rec:
+        _worst = 0
+        for _ci in range(1, 7):
+            try:
+                _sz = round(float(ch_sizes.get(_ci, '')), 1)
+            except (ValueError, TypeError):
+                continue
+            if _sz not in _ISO_TABLE:
+                continue
+            _conc = sf(_latest_rec.get(f'ch{_ci}_diff_m3'))
+            if _conc is None:
+                continue
+            _ch_cls = 10  # beyond ISO 9 until proven otherwise
+            for _cls, _lim in _ISO_TABLE[_sz]:
+                if _conc <= _lim:
+                    _ch_cls = _cls
+                    break
+            if _ch_cls > _worst:
+                _worst = _ch_cls
+        if _worst > 0:
+            _iso_class = _worst
+
+    if _iso_class is None:
+        _iso_color = '#6b7280'
+        _iso_label = 'ISO —'
+    elif _iso_class <= 4:
+        _iso_color = '#00e676'
+        _iso_label = f'ISO&nbsp;{_iso_class}'
+    elif _iso_class <= 6:
+        _iso_color = '#4ade80'
+        _iso_label = f'ISO&nbsp;{_iso_class}'
+    elif _iso_class == 7:
+        _iso_color = '#facc15'
+        _iso_label = f'ISO&nbsp;{_iso_class}'
+    elif _iso_class == 8:
+        _iso_color = '#fb923c'
+        _iso_label = f'ISO&nbsp;{_iso_class}'
+    else:
+        _iso_color = '#f87171'
+        _iso_label = f'ISO&nbsp;{_iso_class if _iso_class <= 9 else "&gt;9"}'
+    iso_badge_html = (
+        f'<div class="iso-wrap">'
+        f'<div class="iso-lbl">Clean Room Class</div>'
+        f'<div class="iso-badge" style="color:{_iso_color};border-color:{_iso_color};">'
+        f'{_iso_label}</div></div>'
+    )
+
     # ── connection banner ─────────────────────────────────────────────────────
     if _counter_online:
         conn_banner = ''
@@ -651,6 +708,14 @@ def generate_dashboard_html(csv_path, output_path):
   }}
   select:focus {{ outline: none; border-color: #38bdf8; }}
   .updated {{ font-size: 11px; color: #4b5563; align-self: flex-end; padding-bottom: 6px; }}
+  .iso-wrap {{ align-self: flex-end; margin-bottom: 6px; }}
+  .iso-lbl  {{ font-size: 10px; color: #6b7280; letter-spacing: 1px;
+               text-transform: uppercase; margin-bottom: 4px; }}
+  .iso-badge {{
+    display: inline-block; font-size: 14px; font-weight: bold;
+    letter-spacing: 3px; border: 1.5px solid; border-radius: 6px;
+    padding: 4px 16px; font-family: inherit;
+  }}
   .status-strip {{
     display: flex; gap: 20px; flex-wrap: wrap;
     background: #0f172a; border: 1px solid #1f2937;
@@ -708,6 +773,7 @@ def generate_dashboard_html(csv_path, output_path):
       <option value="2880">Last 2 days</option>
     </select>
   </div>
+  {iso_badge_html}
   <div class="updated">Last pushed: {updated}</div>
 </div>
 
