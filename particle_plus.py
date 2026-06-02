@@ -313,8 +313,8 @@ def generate_dashboard_html(csv_path, output_path):
             reader = csv.DictReader(f)
             rows = list(reader)
 
-    # filter last 2 days — try counter date/time, then sync_time/snapshot_time fallback
-    cutoff = datetime.now() - timedelta(days=2)
+    # filter last 7 days — try counter date/time, then sync_time/snapshot_time fallback
+    cutoff = datetime.now() - timedelta(days=7)
     recent = []
     for row in rows:
         dt = None
@@ -338,7 +338,7 @@ def generate_dashboard_html(csv_path, output_path):
         if dt is None or dt >= cutoff:
             recent.append(row)
 
-    log(f"Dashboard: {len(recent)} records in last 7 days")
+    log(f"Dashboard: {len(recent)} records in last 7 days (cutoff: {cutoff.strftime('%Y-%m-%d %H:%M:%S')})")
 
     # ── helpers ───────────────────────────────────────────────────────────────
     def sf(val):
@@ -645,10 +645,8 @@ def generate_dashboard_html(csv_path, output_path):
         _iso_color = '#f87171'
         _iso_label = f'ISO&nbsp;{_iso_class if _iso_class <= 9 else "&gt;9"}'
     iso_badge_html = (
-        f'<div class="iso-wrap">'
-        f'<div class="iso-lbl">Clean Room Class</div>'
         f'<div class="iso-badge" style="color:{_iso_color};border-color:{_iso_color};">'
-        f'{_iso_label}</div></div>'
+        f'{_iso_label}</div>'
     )
 
     # ── connection banner ─────────────────────────────────────────────────────
@@ -708,12 +706,10 @@ def generate_dashboard_html(csv_path, output_path):
   }}
   select:focus {{ outline: none; border-color: #38bdf8; }}
   .updated {{ font-size: 11px; color: #4b5563; align-self: flex-end; padding-bottom: 6px; }}
-  .iso-wrap {{ align-self: flex-end; margin-bottom: 6px; }}
-  .iso-lbl  {{ font-size: 10px; color: #6b7280; letter-spacing: 1px;
-               text-transform: uppercase; margin-bottom: 4px; }}
   .iso-badge {{
-    display: inline-block; font-size: 14px; font-weight: bold;
-    letter-spacing: 3px; border: 1.5px solid; border-radius: 6px;
+    display: inline-block; align-self: flex-end; margin-bottom: 6px;
+    font-size: 14px; font-weight: bold; letter-spacing: 3px;
+    border: 1.5px solid; border-radius: 6px;
     padding: 4px 16px; font-family: inherit;
   }}
   .status-strip {{
@@ -762,7 +758,7 @@ def generate_dashboard_html(csv_path, output_path):
   <div class="ctrl-group">
     <label>Time Range</label>
     <select id="sel-range" onchange="filterAndRender()">
-      <option value="0" selected>All data (2 days)</option>
+      <option value="0" selected>All data (7 days)</option>
       <option value="30">Last 30 min</option>
       <option value="60">Last 1 hr</option>
       <option value="120">Last 2 hr</option>
