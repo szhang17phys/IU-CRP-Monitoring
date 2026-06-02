@@ -27,11 +27,12 @@ COUNTER_IP   = '10.66.66.68'
 PORT         = 502
 
 BASE_DIR     = '/home/rraut/particle_plus'   # git repo root on noether
-OUTPUT_CSV   = f'{BASE_DIR}/particle_data_archive.csv'
-LIVE_CSV     = f'{BASE_DIR}/particle_data_live.csv'
+DATA_DIR     = f'{BASE_DIR}/data'
+OUTPUT_CSV   = f'{DATA_DIR}/measurements.csv'
+LIVE_CSV     = f'{DATA_DIR}/live.csv'
+SESSION_FILE = f'{DATA_DIR}/session_baseline.txt'
 LOG_FILE     = f'{BASE_DIR}/sync_log.txt'
 PID_FILE     = f'{BASE_DIR}/particle_plus.pid'
-SESSION_FILE = f'{BASE_DIR}/session_baseline.txt'  # records pre-existing before this session
 
 # sampling schedule
 SAMPLE_TIME_S       = 60      # 1 minute sample
@@ -643,7 +644,7 @@ def generate_dashboard_html(csv_path, output_path):
         _iso_label = f'ISO&nbsp;{_iso_class}'
     else:
         _iso_color = '#f87171'
-        _iso_label = f'ISO&nbsp;{_iso_class if _iso_class <= 9 else "&gt;9"}'
+        _iso_label = 'ISO&nbsp;9'
     iso_badge_html = (
         f'<div class="iso-badge" style="color:{_iso_color};border-color:{_iso_color};">'
         f'{_iso_label}</div>'
@@ -708,6 +709,7 @@ def generate_dashboard_html(csv_path, output_path):
   .updated {{ font-size: 11px; color: #4b5563; align-self: flex-end; padding-bottom: 6px; }}
   .iso-badge {{
     display: inline-block; align-self: flex-end; margin-bottom: 6px;
+    margin-left: auto;
     font-size: 14px; font-weight: bold; letter-spacing: 3px;
     border: 1.5px solid; border-radius: 6px;
     padding: 4px 16px; font-family: inherit;
@@ -769,8 +771,8 @@ def generate_dashboard_html(csv_path, output_path):
       <option value="2880">Last 2 days</option>
     </select>
   </div>
-  {iso_badge_html}
   <div class="updated">Last pushed: {updated}</div>
+  {iso_badge_html}
 </div>
 
 <div class="status-strip">{status_strip_html}</div>
@@ -906,7 +908,7 @@ def push_to_github(repo_dir, csv_path):
     import shutil
 
     html_path = os.path.join(repo_dir, 'index.html')
-    csv_dest  = os.path.join(repo_dir, 'data', 'particle_data.csv')
+    csv_dest  = os.path.join(repo_dir, 'data', 'measurements.csv')
 
     os.makedirs(os.path.join(repo_dir, 'data'), exist_ok=True)
 
@@ -1179,6 +1181,7 @@ def main():
     args = parser.parse_args()
 
     os.makedirs(BASE_DIR, exist_ok=True)
+    os.makedirs(DATA_DIR, exist_ok=True)
 
     if args.stop:
         if os.path.exists(PID_FILE):
