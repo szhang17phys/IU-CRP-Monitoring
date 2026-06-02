@@ -49,6 +49,12 @@ GITHUB_REPO_DIR     = BASE_DIR
 GITHUB_BRANCH       = 'main'
 GITHUB_REMOTE       = 'origin'
 
+# Counter admin password — must be written to register 1000 BEFORE any Protected
+# Write (PW) register can be written.  Registers 1016 (Date) and 1027 (Time) are
+# R+PW, so without this the clock writes silently fail and date/time stay empty.
+# Default is empty string (no password set).  Change if a password was configured.
+COUNTER_PASSWORD    = ''
+
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ─── CONNECTION STATE ─────────────────────────────────────────────────────────
@@ -148,23 +154,46 @@ def set_params(client):
         f"cycles={rc.registers[0]}")
 
 def sync_counter_clock(client):
-    """Sync the counter's RTC to Pi system time (registers 1016=Date, 1027=Time)."""
+    """Sync the counter's RTC to Pi system time.
+
+    Protocol (from Particles Plus Modbus Register Map):
+      Reg 1000  Admin Password  (W)    — must be written first to unlock PW registers
+      Reg 1016  Current Date    (R+PW) — YYYY-MM-DD, 11 String regs
+      Reg 1027  Current Time    (R+PW) — hh:mm:ss,   9 String regs
+      Reg 5001  Device Status   (R)    — bit 0x0004 = 'Time of day clock not running'
+    """
+    # Step 1: check if the clock hardware is actually running
+    rs = client.read_holding_registers(address=5001, count=1)
+    if not rs.isError() and (rs.registers[0] & 0x0004):
+        log("Counter RTC hardware not running (Device Status 5001 bit 0x0004) "
+            "— cannot set clock via Modbus", 'WARN')
+        return
+
     now = datetime.now()
-    date_str = now.strftime('%Y-%m-%d')   # YYYY-MM-DD (10 chars → 11 regs)
-    time_str = now.strftime('%H:%M:%S')   # hh:mm:ss   ( 8 chars →  9 regs)
+    date_str = now.strftime('%Y-%m-%d')   # YYYY-MM-DD
+    time_str = now.strftime('%H:%M:%S')   # hh:mm:ss
     try:
+        # Step 2: write admin password to register 1000 to unlock Protected Write regs
+        client.write_registers(address=1000, values=encode_string(COUNTER_PASSWORD, 16))
+        time.sleep(0.15)
+        # Step 3: write date and time
         client.write_registers(address=1016, values=encode_string(date_str, 11))
         time.sleep(0.2)
         client.write_registers(address=1027, values=encode_string(time_str, 9))
         time.sleep(0.2)
-        # read back to verify
+        # Step 4: read back to verify the writes actually took effect
         rd = client.read_holding_registers(address=1016, count=11)
         rt = client.read_holding_registers(address=1027, count=9)
         rb_date = decode_string(rd.registers) if not rd.isError() else '?'
         rb_time = decode_string(rt.registers) if not rt.isError() else '?'
-        log(f"Counter clock synced: sent {date_str} {time_str} | readback {rb_date} {rb_time}")
+        if rb_date == date_str and rb_time == time_str:
+            log(f"Counter clock synced OK: {date_str} {time_str}")
+        else:
+            log(f"Counter clock sync FAILED — sent {date_str} {time_str} "
+                f"but readback is '{rb_date}' '{rb_time}'. "
+                f"Check COUNTER_PASSWORD or if clock hardware is running.", 'WARN')
     except Exception as e:
-        log(f"Counter clock sync failed: {e}", 'WARN')
+        log(f"Counter clock sync error: {e}", 'WARN')
 
 def start_sampling(client):
     client.write_registers(address=5000, values=[1])
@@ -1059,6 +1088,7 @@ def mode_sync(client=None):
             return False
 
     try:
+        sync_counter_clock(client)   # set RTC so new records get real timestamps
         total = get_record_count(client)
         log(f"Records on counter: {total}")
 
@@ -1096,8 +1126,13 @@ def mode_sync(client=None):
                 if data:
                     data['sync_time'] = datetime.now().isoformat()
                     records.append(data)
+                    _ts_ok = data.get('timestamp_valid', None)
                     log(f"  [{i:4d}/{total}] (new {i-last_saved}/{n_new}) "
-                        f"temp={data.get('temp_C','?')}C "
+                        f"Date: {data.get('date','') or '(empty)'}  "
+                        f"Time: {data.get('time','') or '(empty)'}  "
+                        f"ts_valid={_ts_ok}  "
+                        f"temp={data.get('temp_C','?')}C  "
+                        f"RH={data.get('RH_pct','?')}%  "
                         f"ch1={data.get('ch1_diff_m3','?')}/m³")
                 else:
                     failed.append(i)
@@ -1144,9 +1179,13 @@ def mode_live():
                 data = read_live_snapshot(client)
                 if data:
                     save_to_csv([data], LIVE_CSV)
-                    log(f"Live: temp={data.get('temp_C')}C "
-                        f"RH={data.get('RH_pct')}% "
-                        f"ch1_diff_m3={data.get('ch1_diff_m3')}")
+                    log(f"Live: "
+                        f"Date: {data.get('date','') or '(empty)'}  "
+                        f"Time: {data.get('time','') or '(empty)'}  "
+                        f"ts_valid={data.get('timestamp_valid',None)}  "
+                        f"temp={data.get('temp_C')}C  "
+                        f"RH={data.get('RH_pct')}%  "
+                        f"ch1={data.get('ch1_diff_m3')}/m³")
             except Exception as e:
                 log(f"Live error: {e}", 'ERROR')
             finally:
