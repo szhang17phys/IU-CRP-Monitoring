@@ -551,8 +551,14 @@ def generate_dashboard_html(csv_path, output_path):
     # each measured value is held horizontally until the next measurement arrives.
     # No gap sentinels: a long offline period shows as a flat held line, which
     # correctly represents "last known value" rather than a misleading blank.
-    _plot_timestamps = timestamps
-    _plot_records    = chart_records
+    # Sort chronologically so the JS time-range filter (sliceIdx) works correctly.
+    if timestamps:
+        _paired = sorted(zip(timestamps, chart_records), key=lambda x: x[0])
+        _plot_timestamps = [x[0] for x in _paired]
+        _plot_records    = [x[1] for x in _paired]
+    else:
+        _plot_timestamps = timestamps
+        _plot_records    = chart_records
 
     ch_colors = ['#00b4d8', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6', '#1abc9c']
     pm_colors = ['#ff6b6b', '#ff9f43', '#ffd32a', '#0be881', '#67e8f9', '#c084fc']
