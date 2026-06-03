@@ -87,19 +87,29 @@
   .stat-v { color: #93c5fd; font-weight: bold; font-size: 12px; }
   .stat-v.warn { color: #fbbf24; }
   .stat-v.alert { color: #f87171; }
-  .notif-panel {
-    display: flex; flex-direction: column; align-self: stretch;
-    min-width: 230px; max-width: 320px;
-    background: #060d1a; border: 1px solid #1e3a5f;
-    border-radius: 6px; padding: 7px 12px 8px; gap: 3px;
+  /* notification center badge + dropdown */
+  .notif-badge-wrap {
+    position: relative; display: inline-block;
+    align-self: flex-end; margin-bottom: 6px;
   }
+  .notif-badge {
+    cursor: pointer; user-select: none;
+  }
+  .notif-dropdown {
+    display: none; position: absolute; right: 0; top: calc(100% + 6px);
+    z-index: 200;
+    background: #060d1a; border: 1px solid #1e3a5f;
+    border-radius: 6px; padding: 7px 14px 10px; min-width: 295px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  }
+  .notif-dropdown.open { display: block; }
   .notif-hdr {
     color: #4b7ab8; font-size: 9px; text-transform: uppercase;
     letter-spacing: 1.8px; padding-bottom: 5px;
-    border-bottom: 1px solid #1e293b; margin-bottom: 3px;
+    border-bottom: 1px solid #1e293b; margin-bottom: 5px;
   }
   .notif-row {
-    font-size: 10px; line-height: 1.45; white-space: nowrap;
+    font-size: 10.5px; line-height: 1.6; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis;
   }
   .ni-ok    { color: #4ade80; }
@@ -108,6 +118,7 @@
   .ni-email { color: #93c5fd; }
   .ni-info  { color: #d1d5db; }
   .ni-mute  { color: #4b5563; }
+
 </style>
 </head>
 <body>
@@ -134,9 +145,9 @@
       <option value="2880">Last 2 days</option>
     </select>
   </div>
-  <div class="updated">Last pushed: 2026-06-03 13:21:09</div>
+  <div class="updated">Last pushed: 2026-06-03 13:26:58</div>
   <div style="flex:1"></div>
-  <div class="notif-panel"><div class="notif-hdr">⊙ SYSTEM STATUS</div><div class="notif-row ni-info">● Last sample: 2026-06-03 12:51:06 (30 min ago)</div><div class="notif-row ni-ok">● RH 28% — nominal</div><div class="notif-row ni-ok">● Temp 25.1°C / 77°F — nominal</div><div class="notif-row ni-alert">▲ 0.3µm 7,765,558 /m³ — above contamination threshold</div><div class="notif-row ni-mute">○ No alerts emailed in last 24 hr</div></div>
+  <div class="notif-badge-wrap"><div class="iso-badge notif-badge" style="color:#f87171;border-color:#f87171;" onclick="toggleNotifDropdown()" title="System status (click to expand)">⚠ 1 ALERT</div><div class="notif-dropdown" id="notif-dropdown"><div class="notif-hdr">⊙ SYSTEM STATUS</div><div class="notif-row ni-info">● Last sample: 2026-06-03 12:51:06 (35 min ago)</div><div class="notif-row ni-ok">● RH 28% — nominal</div><div class="notif-row ni-ok">● Temp 25.1°C / 77°F — nominal</div><div class="notif-row ni-alert">▲ 0.3µm 7,765,558 /m³ — above contamination threshold</div><div class="notif-row ni-mute">○ No alerts emailed in last 24 hr</div></div></div>
   <div class="iso-badge" style="color:#f87171;border-color:#f87171;margin-left:14px;">ISO&nbsp;9</div>
 </div>
 
@@ -327,6 +338,19 @@ function filterAndRender() {
 }
 
 filterAndRender();
+
+function toggleNotifDropdown() {
+  var d = document.getElementById("notif-dropdown");
+  if (d) d.classList.toggle("open");
+}
+document.addEventListener("click", function(e) {
+  var wrap = document.querySelector(".notif-badge-wrap");
+  if (wrap && !wrap.contains(e.target)) {
+    var d = document.getElementById("notif-dropdown");
+    if (d) d.classList.remove("open");
+  }
+});
+
 </script>
 </body>
 </html>
