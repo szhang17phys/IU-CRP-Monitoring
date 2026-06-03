@@ -488,7 +488,9 @@ def generate_dashboard_html(csv_path, output_path):
         return None
 
     def c_to_f(c):
-        return round(c * 9/5 + 32, 1) if c is not None else None
+        """Convert °C → °F. Returns None for None, zero, or implausible values
+        (device returns 0 when the sensor is not active)."""
+        return round(c * 9/5 + 32, 1) if (c is not None and c > 0) else None
 
     # ── extract data ──────────────────────────────────────────────────────────
     def get_real_ts(r):
@@ -614,7 +616,7 @@ def generate_dashboard_html(csv_path, output_path):
     #    not in historical records — read LIVE_CSV for the env chart/cards ──────
     live_cutoff = datetime.now() - timedelta(hours=24)
     live_ts      = []
-    live_temp_f  = []
+    live_temp_c  = []   # raw °C values (None when sensor inactive/zero)
     live_rh_vals = []
     if os.path.exists(LIVE_CSV):
         with open(LIVE_CSV, 'r') as _lf:
@@ -626,21 +628,29 @@ def generate_dashboard_html(csv_path, output_path):
                     _dt = datetime.fromisoformat(_ts)
                     if _dt >= live_cutoff:
                         live_ts.append(_dt.strftime('%Y-%m-%d %H:%M:%S'))
-                        live_temp_f.append(c_to_f(sf(_lr.get('temp_C'))))
+                        _tc = sf(_lr.get('temp_C'))
+                        # treat 0 as "no reading" — device returns 0 when sensor inactive
+                        live_temp_c.append(_tc if (_tc is not None and _tc > 0) else None)
                         live_rh_vals.append(sf(_lr.get('RH_pct')))
                 except Exception:
                     pass
+    live_temp_f = [c_to_f(v) for v in live_temp_c]   # °F for chart
 
     # ── status strip ──────────────────────────────────────────────────────────
+    # Filter zero — device stores 0 when temp sensor not active (records 1-123)
     lv_temp_c = latest_val('temp_C')
-    last_temp_f = f'{c_to_f(lv_temp_c):.1f}' if lv_temp_c is not None else '—'
+    if lv_temp_c is not None and lv_temp_c <= 0:
+        lv_temp_c = None
+    last_temp_c_str = f'{lv_temp_c:.1f}' if lv_temp_c is not None else '—'
+    last_temp_f     = f'{c_to_f(lv_temp_c):.1f}' if lv_temp_c is not None else '—'
     lv_rh   = latest_val('RH_pct')
     last_rh = f'{lv_rh:.1f}'  if lv_rh  is not None else '—'
     # override env cards with latest live reading if available (live has real values)
-    if live_temp_f:
-        _ltf = next((v for v in reversed(live_temp_f) if v is not None), None)
-        if _ltf is not None:
-            last_temp_f = f'{_ltf:.1f}'
+    if live_temp_c:
+        _ltc = next((v for v in reversed(live_temp_c) if v is not None), None)
+        if _ltc is not None:
+            last_temp_c_str = f'{_ltc:.1f}'
+            last_temp_f     = f'{c_to_f(_ltc):.1f}'
     if live_rh_vals:
         _lrh = next((v for v in reversed(live_rh_vals) if v is not None), None)
         if _lrh is not None:
@@ -681,7 +691,7 @@ def generate_dashboard_html(csv_path, output_path):
         f'<span class="card-val" style="color:{c}">{val}</span>'
         f'<span class="card-unit">{unit}</span></div>'
         for (lab, val, unit), c in zip(
-            [('Temperature', last_temp_f, '°F'),
+            [('Temperature', f'{last_temp_c_str}\u00b0C&nbsp;/&nbsp;{last_temp_f}', '\u00b0F'),
              ('Humidity',    last_rh,     '%'),
              ('Flow Rate',   last_flow,   'CFM')],
             ['#ff6b6b', '#4ecdc4', '#45b7d1'])
@@ -1181,7 +1191,13 @@ function filterAndRender() {{
   Plotly.react('chart-dist', DIST,
     Object.assign({{}}, DARK, {{
       showlegend: false, bargap: 0.12,
-      yaxis: Object.assign({{}}, DARK.yaxis, {{ title: 'Counts / m\u00b3', type: 'log', range: [-1, null] }}),
+      yaxis: Object.assign({{}}, DARK.yaxis, {{
+        title: 'Counts / m\u00b3', type: 'log',
+        range: [-1, 3],
+        dtick: 1,
+        tickvals: [0.1, 1, 10, 100, 1000],
+        ticktext: ['0.1', '1', '10', '100', '1\u200ak'],
+      }}),
       xaxis: Object.assign({{}}, DARK.xaxis, {{ title: 'Particle Size (\u03bcm)' }}),
     }}), {{responsive: true, displaylogo: false}});
 
