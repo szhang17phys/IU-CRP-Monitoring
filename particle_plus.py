@@ -863,13 +863,19 @@ def generate_dashboard_html(csv_path, output_path):
     # Build HTML rows
     _css_map = {'ok': 'ni-ok', 'warn': 'ni-warn', 'alert': 'ni-alert',
                 'email': 'ni-email', 'info': 'ni-info', 'mute': 'ni-mute'}
+    _has_alert = any(s in ('alert', 'warn') for s, _ in _notif_rows)
+    _dot_html  = ' <span style="color:#f87171">&#9679;</span>' if _has_alert else \
+                 ' <span style="color:#4ade80">&#9679;</span>'
     notif_panel_html = (
-        '<div class="notif-panel">'
+        '<div class="notif-wrap">'
+        f'<button class="notif-btn" onclick="document.getElementById(\'notif-drop\').classList.toggle(\'open\')">'
+        f'\u2299\u00a0ALERTS{_dot_html}</button>'
+        '<div class="notif-drop" id="notif-drop">'
         '<div class="notif-hdr">\u2299\u00a0SYSTEM\u00a0STATUS</div>'
         + ''.join(
             f'<div class="notif-row {_css_map.get(s, "ni-mute")}">{msg}</div>'
             for s, msg in _notif_rows)
-        + '</div>'
+        + '</div></div>'
     )
 
     # ── connection banner ─────────────────────────────────────────────────────
@@ -977,21 +983,27 @@ def generate_dashboard_html(csv_path, output_path):
   .stat-v {{ color: #93c5fd; font-weight: bold; font-size: 12px; }}
   .stat-v.warn {{ color: #fbbf24; }}
   .stat-v.alert {{ color: #f87171; }}
-  .notif-panel {{
-    display: flex; flex-direction: column; align-self: stretch;
-    min-width: 230px; max-width: 320px;
-    background: #060d1a; border: 1px solid #1e3a5f;
-    border-radius: 6px; padding: 7px 12px 8px; gap: 3px;
+  .notif-wrap {{ position: relative; align-self: flex-end; margin-bottom: 6px; }}
+  .notif-btn {{
+    background: #060d1a; border: 1px solid #1e3a5f; border-radius: 6px;
+    color: #4b7ab8; font-family: inherit; font-size: 11px; letter-spacing: 1.5px;
+    text-transform: uppercase; padding: 5px 14px; cursor: pointer; white-space: nowrap;
   }}
+  .notif-btn:hover {{ border-color: #38bdf8; color: #93c5fd; }}
+  .notif-drop {{
+    display: none; position: absolute; right: 0; top: calc(100% + 6px);
+    min-width: 320px; max-width: 420px;
+    background: #060d1a; border: 1px solid #1e3a5f; border-radius: 6px;
+    padding: 10px 16px 14px; z-index: 100;
+    flex-direction: column; gap: 5px;
+  }}
+  .notif-drop.open {{ display: flex; }}
   .notif-hdr {{
-    color: #4b7ab8; font-size: 9px; text-transform: uppercase;
-    letter-spacing: 1.8px; padding-bottom: 5px;
-    border-bottom: 1px solid #1e293b; margin-bottom: 3px;
+    color: #4b7ab8; font-size: 10px; text-transform: uppercase;
+    letter-spacing: 1.8px; padding-bottom: 6px;
+    border-bottom: 1px solid #1e293b; margin-bottom: 4px;
   }}
-  .notif-row {{
-    font-size: 10px; line-height: 1.45; white-space: nowrap;
-    overflow: hidden; text-overflow: ellipsis;
-  }}
+  .notif-row {{ font-size: 13px; line-height: 1.7; }}
   .ni-ok    {{ color: #4ade80; }}
   .ni-warn  {{ color: #fbbf24; }}
   .ni-alert {{ color: #f87171; }}
@@ -1217,6 +1229,13 @@ function filterAndRender() {{
 }}
 
 filterAndRender();
+
+document.addEventListener('click', function(e) {{
+  var drop = document.getElementById('notif-drop');
+  if (drop && drop.classList.contains('open') && !drop.parentElement.contains(e.target)) {{
+    drop.classList.remove('open');
+  }}
+}});
 </script>
 </body>
 </html>"""
