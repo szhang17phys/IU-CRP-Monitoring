@@ -563,7 +563,7 @@ def generate_dashboard_html(csv_path, output_path):
         sz = sf(ref.get(f'ch{i}_size_um'))
         ch_sizes[i] = f'{sz:.1f}' if sz is not None else str(i)
 
-    ch_counts = {i: [sf(r.get(f'ch{i}_diff_counts')) if r is not None else None
+    ch_counts = {i: [sf(r.get(f'ch{i}_diff_m3')) if r is not None else None
                      for r in _plot_records] for i in range(1, 7)}
     ch_pm     = {i: [sf(r.get(f'ch{i}_pm_ugm3'))     if r is not None else None
                      for r in _plot_records] for i in range(1, 7)}
@@ -683,6 +683,18 @@ def generate_dashboard_html(csv_path, output_path):
     live_ts_js    = json.dumps(live_ts)
     temp_f_js     = json.dumps(live_temp_f)
     rh_js         = json.dumps(live_rh_vals)
+
+    # ISO 14644-1:2015 concentration limits (counts/m³) for the 0.5 µm channel.
+    # These are added as reference lines on the particle count chart so the
+    # measured concentrations can be compared directly to the standard.
+    _iso_ref_lines = [
+        {'y': 3520,     'label': 'ISO\u00a05',  'color': '#00e676'},
+        {'y': 35200,    'label': 'ISO\u00a06',  'color': '#4ade80'},
+        {'y': 352000,   'label': 'ISO\u00a07',  'color': '#facc15'},
+        {'y': 3520000,  'label': 'ISO\u00a08',  'color': '#fb923c'},
+        {'y': 35200000, 'label': 'ISO\u00a09',  'color': '#f87171'},
+    ]
+    iso_lines_js = json.dumps(_iso_ref_lines)
 
     updated = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -835,6 +847,17 @@ def generate_dashboard_html(csv_path, output_path):
   }}
   .row2 {{ display: flex; gap: 12px; margin-bottom: 12px; }}
   .row2 .chart-panel {{ flex: 1; margin-bottom: 0; }}
+  .stats-strip {{
+    display: flex; gap: 0; flex-wrap: wrap;
+    background: #0a1628; border: 1px solid #1e3a5f;
+    border-radius: 7px; padding: 9px 18px;
+    margin-bottom: 14px; font-size: 11px;
+  }}
+  .stat-item {{ flex: 1; min-width: 160px; padding: 3px 12px 3px 0; }}
+  .stat-k {{ color: #4b7ab8; text-transform: uppercase; letter-spacing: 0.8px; display: block; font-size: 9px; }}
+  .stat-v {{ color: #93c5fd; font-weight: bold; font-size: 12px; }}
+  .stat-v.warn {{ color: #fbbf24; }}
+  .stat-v.alert {{ color: #f87171; }}
 </style>
 </head>
 <body>
@@ -869,8 +892,16 @@ def generate_dashboard_html(csv_path, output_path):
 <div class="status-strip">{status_strip_html}</div>
 <div class="cards">{env_cards_html}</div>
 
+<div class="stats-strip">
+  <div class="stat-item"><span class="stat-k">Samples in window</span><span class="stat-v" id="stat-n">--</span></div>
+  <div class="stat-item"><span class="stat-k">0.3 &micro;m &mdash; mean</span><span class="stat-v" id="stat-mean1">--</span></div>
+  <div class="stat-item"><span class="stat-k">0.3 &micro;m &mdash; peak</span><span class="stat-v" id="stat-peak1">--</span></div>
+  <div class="stat-item"><span class="stat-k">ISO 7 exceedances &nbsp;(0.5 &micro;m &gt; 352k /m&sup3;)</span><span class="stat-v" id="stat-exc7">--</span></div>
+  <div class="stat-item"><span class="stat-k">Offline gaps detected</span><span class="stat-v" id="stat-gaps">--</span></div>
+</div>
+
 <div class="chart-panel">
-  <div class="chart-title">Particle Counts Over Time &nbsp;&#8212; all 6 size channels (log scale, counts / sample)</div>
+  <div class="chart-title">Particle Concentration Over Time &nbsp;&#8212; all 6 size channels (log scale, counts / m&#179;, ISO 14644-1 reference lines shown for 0.5 &micro;m)</div>
   <div id="chart-counts" style="height:360px"></div>
 </div>
 
@@ -891,15 +922,16 @@ def generate_dashboard_html(csv_path, output_path):
 </div>
 
 <script>
-const TS     = {ts_js};
-const COUNTS = {counts_traces_js};
-const PM     = {pm_traces_js};
-const DIST   = {dist_traces_js};
-const CH1_C  = {ch1_counts_js};
-const CH2_PM = {ch2_pm_js};
-const LIVE_TS = {live_ts_js};
-const TEMP_F  = {temp_f_js};
-const RH_VALS = {rh_js};
+const TS       = {ts_js};
+const COUNTS   = {counts_traces_js};
+const PM       = {pm_traces_js};
+const DIST     = {dist_traces_js};
+const CH1_C    = {ch1_counts_js};
+const CH2_PM   = {ch2_pm_js};
+const LIVE_TS  = {live_ts_js};
+const TEMP_F   = {temp_f_js};
+const RH_VALS  = {rh_js};
+const ISO_LINES = {iso_lines_js};
 
 const DARK = {{
   paper_bgcolor: '#0f172a',
@@ -931,28 +963,91 @@ function sliceTraces(traces, i) {{
   }}));
 }}
 
+// Returns vrect shapes for gaps > GAP_THRESH_MS in a timestamp array.
+// These are rendered as subtle grey bands indicating the counter was offline.
+function gapShapes(ts) {{
+  const GAP_THRESH_MS = 90 * 60 * 1000;   // 90 minutes
+  const shapes = [];
+  for (let k = 1; k < ts.length; k++) {{
+    if (new Date(ts[k]) - new Date(ts[k-1]) > GAP_THRESH_MS) {{
+      shapes.push({{
+        type: 'rect', xref: 'x', yref: 'paper',
+        x0: ts[k-1], x1: ts[k], y0: 0, y1: 1,
+        fillcolor: 'rgba(100,116,139,0.10)', line: {{ width: 0 }}, layer: 'below'
+      }});
+    }}
+  }}
+  return shapes;
+}}
+
+// ISO 14644-1 reference lines for the 0.5 µm channel (horizontal dashed lines).
+function isoShapes() {{
+  return ISO_LINES.map(l => ({{
+    type: 'line', xref: 'paper', x0: 0, x1: 1,
+    yref: 'y', y0: l.y, y1: l.y,
+    line: {{ color: l.color, width: 1, dash: 'dot' }}
+  }}));
+}}
+function isoAnnotations() {{
+  return ISO_LINES.map(l => ({{
+    xref: 'paper', x: 1.01, yref: 'y', y: l.y,
+    text: l.label, showarrow: false, xanchor: 'left',
+    font: {{ color: l.color, size: 9, family: 'Courier New, monospace' }}
+  }}));
+}}
+
+function updateStats(i) {{
+  const ts   = TS.slice(i);
+  const ch1  = COUNTS[0].y.slice(i).filter(v => v !== null && v !== undefined);
+  const ch2  = COUNTS[1].y.slice(i).filter(v => v !== null && v !== undefined);
+  const n    = ts.length;
+  const fmt  = v => (v !== null && !isNaN(v)) ? Math.round(v).toLocaleString() + '\u00a0/m\u00b3' : '--';
+  const mean1 = ch1.length ? ch1.reduce((a,b)=>a+b,0)/ch1.length : null;
+  const peak1 = ch1.length ? Math.max(...ch1) : null;
+  const exc7  = ch2.filter(v => v > 352000).length;
+  const exc7s = ch2.length ? exc7 + '\u00a0/\u00a0' + ch2.length + '\u00a0(' + (exc7/ch2.length*100).toFixed(0) + '%)' : '--';
+  const gaps  = gapShapes(ts).length;
+
+  document.getElementById('stat-n').textContent     = n;
+  document.getElementById('stat-mean1').textContent = fmt(mean1);
+  document.getElementById('stat-peak1').textContent = fmt(peak1);
+
+  const excEl = document.getElementById('stat-exc7');
+  excEl.textContent  = exc7s;
+  excEl.className    = 'stat-v' + (exc7 > 0 ? ' warn' : '');
+
+  const gapEl = document.getElementById('stat-gaps');
+  gapEl.textContent = gaps > 0 ? gaps + (gaps === 1 ? ' gap' : ' gaps') : 'none';
+  gapEl.className   = 'stat-v' + (gaps > 0 ? ' warn' : '');
+}}
+
 function filterAndRender() {{
   const mins = parseInt(document.getElementById('sel-range').value);
   const i    = sliceIdx(mins);
   const ts   = TS.slice(i);
+  const gaps = gapShapes(ts);
 
   Plotly.react('chart-counts', sliceTraces(COUNTS, i),
     Object.assign({{}}, DARK, {{
-      yaxis: Object.assign({{}}, DARK.yaxis, {{ title: 'Counts / sample', type: 'log' }}),
-      xaxis: Object.assign({{}}, DARK.xaxis, {{ title: '' }}),
+      yaxis:       Object.assign({{}}, DARK.yaxis, {{ title: 'Counts / m\u00b3', type: 'log' }}),
+      xaxis:       Object.assign({{}}, DARK.xaxis, {{ title: '' }}),
+      margin:      {{ l: 60, r: 72, t: 30, b: 50 }},
+      shapes:      [...gaps, ...isoShapes()],
+      annotations: isoAnnotations(),
     }}), {{responsive: true, displaylogo: false}});
 
   Plotly.react('chart-pm', sliceTraces(PM, i),
     Object.assign({{}}, DARK, {{
-      yaxis: Object.assign({{}}, DARK.yaxis, {{ title: '\u03bcg / m\u00b3' }}),
-      xaxis: Object.assign({{}}, DARK.xaxis, {{ title: '' }}),
+      yaxis:  Object.assign({{}}, DARK.yaxis, {{ title: '\u03bcg / m\u00b3' }}),
+      xaxis:  Object.assign({{}}, DARK.xaxis, {{ title: '' }}),
+      shapes: gaps,
     }}), {{responsive: true, displaylogo: false}});
 
   Plotly.react('chart-dist', DIST,
     Object.assign({{}}, DARK, {{
       showlegend: false, bargap: 0.3,
-      yaxis: Object.assign({{}}, DARK.yaxis, {{ title: 'Counts', type: 'log', range: [-0.5, null] }}),
-      xaxis: Object.assign({{}}, DARK.xaxis, {{ title: 'Particle Size' }}),
+      yaxis: Object.assign({{}}, DARK.yaxis, {{ title: 'Counts / m\u00b3', type: 'log', range: [-0.5, null] }}),
+      xaxis: Object.assign({{}}, DARK.xaxis, {{ title: 'Particle Size (\u03bcm)' }}),
     }}), {{responsive: true, displaylogo: false}});
 
   const livei = (LIVE_TS.length === 0 || !mins) ? 0 : (() => {{
@@ -976,6 +1071,8 @@ function filterAndRender() {{
                tickfont: {{ color: '#6b7280', size: 10 }},
                title_font: {{ color: '#6b7280', size: 11 }} }},
   }}), {{responsive: true, displaylogo: false}});
+
+  updateStats(i);
 }}
 
 filterAndRender();
