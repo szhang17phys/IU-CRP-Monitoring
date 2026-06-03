@@ -488,7 +488,7 @@ def generate_dashboard_html(csv_path, output_path):
 
     _BULK_THRESHOLD_S = 60   # <60 s gap between consecutive sync_times → bulk
 
-    # collect records; always parse raw sync_time separately for ordering/detection
+    # collect records sorted by record_number
     _all_ts = []
     for r in recent:
         ts = get_real_ts(r)
@@ -496,39 +496,27 @@ def generate_dashboard_html(csv_path, output_path):
             rec_num = int(float(r.get('record_number', 0) or 0))
         except (ValueError, TypeError):
             rec_num = 0
-        # device date/time for chart use
+        # parse datetime for gap detection
         _dt = None
         if ts:
             try:
                 _dt = datetime.fromisoformat(ts.replace(' ', 'T').split('+')[0])
             except Exception:
                 pass
-        # raw sync_time for ordering and bulk detection (always reliable)
-        _sync_dt = None
-        for _sk in ('sync_time', 'snapshot_time'):
-            _sv = (r.get(_sk) or '').strip()
-            if _sv:
-                try:
-                    _sync_dt = datetime.fromisoformat(_sv.replace(' ', 'T').split('+')[0])
-                    break
-                except Exception:
-                    pass
-        _all_ts.append((rec_num, r, ts, _dt, _sync_dt))
-    # Sort by sync_time so bulk-synced records stay adjacent regardless of rec_num
-    # (counter resets restart rec_num at 1, but sync_times are always monotonic)
-    _all_ts.sort(key=lambda x: (x[4] or datetime.min, x[0]))
+        _all_ts.append((rec_num, r, ts, _dt))
+    _all_ts.sort(key=lambda x: x[0])
 
-    # split into batches using sync_time gaps (not device date/time)
+    # split into batches
     _batches = []
     _cur = []
     for item in _all_ts:
         if not _cur:
             _cur.append(item)
         else:
-            _prev_sync = next((x[4] for x in reversed(_cur) if x[4] is not None), None)
-            _this_sync = item[4]
-            if (_prev_sync is not None and _this_sync is not None and
-                    (_this_sync - _prev_sync).total_seconds() <= _BULK_THRESHOLD_S):
+            _prev_dt = next((x[3] for x in reversed(_cur) if x[3] is not None), None)
+            _this_dt = item[3]
+            if (_prev_dt is not None and _this_dt is not None and
+                    (_this_dt - _prev_dt).total_seconds() <= _BULK_THRESHOLD_S):
                 _cur.append(item)          # same bulk batch
             else:
                 _batches.append(_cur)
@@ -545,7 +533,7 @@ def generate_dashboard_html(csv_path, output_path):
                   or datetime.now()
         if _n <= 2:
             # individual sync(s) — sync_time ≈ measurement time
-            for _rn, _r, _ts, _dt, _sync in _batch:
+            for _rn, _r, _ts, _dt in _batch:
                 timestamps.append(_anchor.strftime('%Y-%m-%d %H:%M:%S')
                                    if _dt is None else _dt.strftime('%Y-%m-%d %H:%M:%S'))
                 chart_records.append(_r)
@@ -558,12 +546,6 @@ def generate_dashboard_html(csv_path, output_path):
             ]
             timestamps.extend(_est_ts)
             chart_records.extend([x[1] for x in _batch])
-
-    # Final sort: ensure timestamps are strictly chronological for chart rendering
-    # (bulk-batch estimation can produce minor out-of-order artefacts)
-    if timestamps:
-        _sorted = sorted(zip(timestamps, chart_records), key=lambda x: x[0])
-        timestamps, chart_records = map(list, zip(*_sorted))
 
     # Step-hold: use real timestamps directly — with line.shape='hv' in Plotly,
     # each measured value is held horizontally until the next measurement arrives.
