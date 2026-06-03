@@ -1236,9 +1236,10 @@ function filterAndRender() {{
        type: 'scatter', mode: 'lines',
        line: {{ color: '#4ecdc4', width: 2 }}, yaxis: 'y2' }},
   ], Object.assign({{}}, DARK, {{
+    margin: {{ l: 60, r: 70, t: 30, b: 50 }},
     xaxis:  Object.assign({{}}, DARK.xaxis,  {{ title: '' }}),
     yaxis:  Object.assign({{}}, DARK.yaxis,  {{ title: 'Temperature (\u00b0F)' }}),
-    yaxis2: {{ title: {{ text: 'Humidity (%)', standoff: 20 }},
+    yaxis2: {{ title: {{ text: 'Humidity (%)', standoff: 15 }},
                overlaying: 'y', side: 'right',
                gridcolor: '#1e293b', linecolor: '#334155',
                tickfont: {{ color: '#6b7280', size: 10 }},
