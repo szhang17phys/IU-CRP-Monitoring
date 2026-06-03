@@ -390,6 +390,10 @@ def generate_dashboard_html(csv_path, output_path):
     dashboard matching the dashboard.py visual design for GitHub Pages.
     """
     import json
+    import sys as _sys
+    _sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                     'features', 'notification_center'))
+    from notification_center import build_notification_component
 
     # ── read CSV ──────────────────────────────────────────────────────────────
     rows = []
@@ -754,117 +758,11 @@ def generate_dashboard_html(csv_path, output_path):
     )
 
     # ── notification center ────────────────────────────────────────────────────
-    # Thresholds mirror features/alerts/alerts.py defaults
-    _N_RH_LOW   = 20.0;  _N_RH_HIGH   = 90.0
-    _N_TF_LOW   = 33.0;  _N_TF_HIGH   = 120.0
-    _N_P_HIGH   = 100000
-
-    # Read alert state written by alerts.py (if it exists)
-    _alert_state = {}
     _alert_state_path = os.path.join(os.path.dirname(OUTPUT_CSV), 'alert_state.json')
-    if os.path.exists(_alert_state_path):
-        try:
-            with open(_alert_state_path) as _af:
-                _alert_state = json.load(_af)
-        except Exception:
-            pass
-
-    _notif_rows = []
-
-    # 1. Last sample time
-    _last_ts_str = get_real_ts(_latest_rec) if _latest_rec else None
-    if _last_ts_str:
-        try:
-            _last_dt   = datetime.fromisoformat(_last_ts_str.replace(' ', 'T'))
-            _ago_s     = int((datetime.now() - _last_dt).total_seconds())
-            _ago_label = (f'{_ago_s // 60}\u00a0min ago' if _ago_s < 3600
-                          else f'{_ago_s // 3600}\u00a0hr ago' if _ago_s < 86400
-                          else f'{_ago_s // 86400}\u00a0day(s) ago')
-            _notif_rows.append(('info',
-                f'\u25cf\u00a0Last sample: {_last_ts_str}\u00a0({_ago_label})'))
-        except Exception:
-            _notif_rows.append(('info', f'\u25cf\u00a0Last sample: {_last_ts_str}'))
-    else:
-        _notif_rows.append(('warn', '\u25cf\u00a0Last sample: unknown'))
-
-    # 2. Relative humidity
-    _rh_now = sf(_latest_rec.get('RH_pct')) if _latest_rec else None
-    if _rh_now is not None:
-        if _rh_now < _N_RH_LOW:
-            _notif_rows.append(('alert',
-                f'\u25b2\u00a0RH\u00a0{_rh_now:.0f}% \u2014 below {_N_RH_LOW:.0f}% threshold (static risk)'))
-        elif _rh_now > _N_RH_HIGH:
-            _notif_rows.append(('alert',
-                f'\u25b2\u00a0RH\u00a0{_rh_now:.0f}% \u2014 above {_N_RH_HIGH:.0f}% threshold (condensation risk)'))
-        else:
-            _notif_rows.append(('ok',
-                f'\u25cf\u00a0RH\u00a0{_rh_now:.0f}% \u2014 nominal'))
-    else:
-        _notif_rows.append(('mute', '\u25cb\u00a0RH: no sensor data'))
-
-    # 3. Temperature
-    _tc_now = sf(_latest_rec.get('temp_C')) if _latest_rec else None
-    if _tc_now is not None and _tc_now > 0:
-        _tf_now = round(_tc_now * 9/5 + 32, 1)
-        if _tf_now < _N_TF_LOW:
-            _notif_rows.append(('alert',
-                f'\u25b2\u00a0Temp\u00a0{_tc_now:.1f}\u00b0C / {_tf_now:.0f}\u00b0F \u2014 below {_N_TF_LOW:.0f}\u00b0F threshold'))
-        elif _tf_now > _N_TF_HIGH:
-            _notif_rows.append(('alert',
-                f'\u25b2\u00a0Temp\u00a0{_tc_now:.1f}\u00b0C / {_tf_now:.0f}\u00b0F \u2014 above {_N_TF_HIGH:.0f}\u00b0F threshold'))
-        else:
-            _notif_rows.append(('ok',
-                f'\u25cf\u00a0Temp\u00a0{_tc_now:.1f}\u00b0C / {_tf_now:.0f}\u00b0F \u2014 nominal'))
-    else:
-        _notif_rows.append(('mute', '\u25cb\u00a0Temp: no sensor data'))
-
-    # 4. Particle concentration at 0.3 µm
-    _p_now = sf(_latest_rec.get('ch1_diff_m3')) if _latest_rec else None
-    if _p_now is not None:
-        if _p_now > _N_P_HIGH:
-            _notif_rows.append(('alert',
-                f'\u25b2\u00a00.3\u00b5m\u00a0{_p_now:,.0f}\u00a0/m\u00b3 \u2014 above contamination threshold'))
-        else:
-            _notif_rows.append(('ok',
-                f'\u25cf\u00a00.3\u00b5m\u00a0{_p_now:,.0f}\u00a0/m\u00b3 \u2014 within limit'))
-    else:
-        _notif_rows.append(('mute', '\u25cb\u00a00.3\u00b5m: no data'))
-
-    # 5. Recent emails from alert_state.json (sent within last 24 hr)
-    _alert_labels = {
-        'rh_low':          'Low humidity',
-        'rh_high':         'High humidity',
-        'temp_low':        'Low temperature',
-        'temp_high':       'High temperature',
-        'particle_high':   'High particle count',
-        'counter_offline': 'Counter offline',
-    }
-    _email_cutoff = datetime.now() - timedelta(hours=24)
-    _email_sent   = False
-    for _ak, _ats in _alert_state.items():
-        try:
-            _adt = datetime.fromisoformat(_ats)
-            if _adt >= _email_cutoff:
-                _notif_rows.append(('email',
-                    f'\u2709\u00a0Email sent: {_alert_labels.get(_ak, _ak)} '
-                    f'at\u00a0{_adt.strftime("%H:%M")}'))
-                _email_sent = True
-        except Exception:
-            pass
-    if not _email_sent:
-        _notif_rows.append(('mute', '\u25cb\u00a0No alerts emailed in last 24\u00a0hr'))
-
-    # Build HTML rows
-    _css_map = {'ok': 'ni-ok', 'warn': 'ni-warn', 'alert': 'ni-alert',
-                'email': 'ni-email', 'info': 'ni-info', 'mute': 'ni-mute'}
-    notif_panel_html = (
-        '<div class="notif-panel">'
-        '<div class="notif-hdr">\u2299\u00a0SYSTEM\u00a0STATUS</div>'
-        + ''.join(
-            f'<div class="notif-row {_css_map.get(s, "ni-mute")}">{msg}</div>'
-            for s, msg in _notif_rows)
-        + '</div>'
-    )
+    _notif = build_notification_component(_latest_rec, _alert_state_path)
+    notif_badge_html = _notif['badge_html']
+    notif_css        = _notif['css']
+    notif_js         = _notif['js']
 
     # ── connection banner ─────────────────────────────────────────────────────
     if _counter_online:
@@ -971,27 +869,7 @@ def generate_dashboard_html(csv_path, output_path):
   .stat-v {{ color: #93c5fd; font-weight: bold; font-size: 12px; }}
   .stat-v.warn {{ color: #fbbf24; }}
   .stat-v.alert {{ color: #f87171; }}
-  .notif-panel {{
-    display: flex; flex-direction: column; align-self: stretch;
-    min-width: 230px; max-width: 320px;
-    background: #060d1a; border: 1px solid #1e3a5f;
-    border-radius: 6px; padding: 7px 12px 8px; gap: 3px;
-  }}
-  .notif-hdr {{
-    color: #4b7ab8; font-size: 9px; text-transform: uppercase;
-    letter-spacing: 1.8px; padding-bottom: 5px;
-    border-bottom: 1px solid #1e293b; margin-bottom: 3px;
-  }}
-  .notif-row {{
-    font-size: 10px; line-height: 1.45; white-space: nowrap;
-    overflow: hidden; text-overflow: ellipsis;
-  }}
-  .ni-ok    {{ color: #4ade80; }}
-  .ni-warn  {{ color: #fbbf24; }}
-  .ni-alert {{ color: #f87171; }}
-  .ni-email {{ color: #93c5fd; }}
-  .ni-info  {{ color: #d1d5db; }}
-  .ni-mute  {{ color: #4b5563; }}
+{notif_css}
 </style>
 </head>
 <body>
@@ -1020,7 +898,7 @@ def generate_dashboard_html(csv_path, output_path):
   </div>
   <div class="updated">Last pushed: {updated}</div>
   <div style="flex:1"></div>
-  {notif_panel_html}
+  {notif_badge_html}
   {iso_badge_html}
 </div>
 
@@ -1211,6 +1089,8 @@ function filterAndRender() {{
 }}
 
 filterAndRender();
+
+{notif_js}
 </script>
 </body>
 </html>"""
