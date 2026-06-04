@@ -707,12 +707,14 @@ def generate_dashboard_html(csv_path, output_path):
     # ISO 14644-1:2015 concentration limits (counts/m³) for the 0.5 µm channel.
     # These are added as reference lines on the particle count chart so the
     # measured concentrations can be compared directly to the standard.
+    # Colors match the \u22650.5 \u00b5m channel trace (#2ecc71 = ch2) since all limits
+    # are defined at that size. ISO 6 is the exact channel color and boldest.
     _iso_ref_lines = [
-        {'y': 3520,     'label': 'ISO\u00a05',  'color': '#00e676'},
-        {'y': 35200,    'label': 'ISO\u00a06',  'color': '#4ade80'},
-        {'y': 352000,   'label': 'ISO\u00a07',  'color': '#facc15'},
-        {'y': 3520000,  'label': 'ISO\u00a08',  'color': '#fb923c'},
-        {'y': 35200000, 'label': 'ISO\u00a09',  'color': '#f87171'},
+        {'y': 3520,     'label': 'ISO\u00a05',  'color': '#a7f3d0', 'width': 1.5, 'dash': 'dash', 'bold': False},
+        {'y': 35200,    'label': 'ISO\u00a06',  'color': '#2ecc71', 'width': 2.5, 'dash': 'dash', 'bold': True},
+        {'y': 352000,   'label': 'ISO\u00a07',  'color': '#34d399', 'width': 1.5, 'dash': 'dash', 'bold': False},
+        {'y': 3520000,  'label': 'ISO\u00a08',  'color': '#10b981', 'width': 1.5, 'dash': 'dash', 'bold': False},
+        {'y': 35200000, 'label': 'ISO\u00a09',  'color': '#059669', 'width': 1.5, 'dash': 'dash', 'bold': False},
     ]
     iso_lines_js = json.dumps(_iso_ref_lines)
 
@@ -1159,14 +1161,15 @@ function isoShapes() {{
   return ISO_LINES.map(l => ({{
     type: 'line', xref: 'paper', x0: 0, x1: 1,
     yref: 'y', y0: l.y, y1: l.y,
-    line: {{ color: l.color, width: 1, dash: 'dot' }}
+    line: {{ color: l.color, width: l.width, dash: l.dash }}
   }}));
 }}
 function isoAnnotations() {{
   return ISO_LINES.map(l => ({{
-    xref: 'paper', x: 1.01, yref: 'y', y: l.y,
-    text: l.label, showarrow: false, xanchor: 'left',
-    font: {{ color: l.color, size: 9, family: 'Courier New, monospace' }}
+    xref: 'paper', x: 1.02, yref: 'y', y: l.y,
+    text: l.bold ? '<b>' + l.label + '</b>' : l.label,
+    showarrow: false, xanchor: 'left',
+    font: {{ color: l.color, size: l.bold ? 12 : 10, family: 'Courier New, monospace' }}
   }}));
 }}
 
