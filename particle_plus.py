@@ -1139,7 +1139,7 @@ def generate_dashboard_html(csv_path, output_path):
 
 <div class="row2">
   <div class="chart-panel">
-    <div class="chart-title">Latest Particle Size Distribution &nbsp;(most recent sample)</div>
+    <div class="chart-title">Latest Particle Size Distribution &nbsp;(most recent sample &mdash; log scale)</div>
     <div id="chart-dist" style="height:280px"></div>
   </div>
   <div class="chart-panel">
@@ -1271,10 +1271,13 @@ function filterAndRender() {{
       shapes: gaps,
     }}), {{responsive: true, displaylogo: false}});
 
+  // Dynamic log-scale range: expand to the actual max count so tall bars are never clipped
+  const _distMax = (DIST[0] && DIST[0].y.length) ? Math.max(...DIST[0].y) : 100;
+  const _distLogMax = Math.log10(Math.max(_distMax, 1)) + 0.3;
   Plotly.react('chart-dist', DIST,
     Object.assign({{}}, DARK, {{
       showlegend: false, bargap: 0.3,
-      yaxis: Object.assign({{}}, DARK.yaxis, {{ title: 'Counts / m\u00b3', type: 'log', range: [-0.5, 3.31] }}),
+      yaxis: Object.assign({{}}, DARK.yaxis, {{ title: 'Counts / m\u00b3', type: 'log', range: [-0.5, _distLogMax] }}),
       xaxis: Object.assign({{}}, DARK.xaxis, {{ title: 'Particle Size (\u03bcm)' }}),
     }}), {{responsive: true, displaylogo: false}});
 
