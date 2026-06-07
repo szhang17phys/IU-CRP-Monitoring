@@ -142,9 +142,9 @@
       <option value="10080">Last 7 days</option>
     </select>
   </div>
-  <div class="updated">Last pushed: 2026-06-07 19:13:00</div>
+  <div class="updated">Last pushed: 2026-06-07 19:20:00</div>
   <div style="flex:1"></div>
-  <div class="notif-wrap"><button class="notif-btn" onclick="document.getElementById('notif-drop').classList.toggle('open')">⊙ ALERTS <span style="color:#f87171">&#9679;</span></button><div class="notif-drop" id="notif-drop"><div class="notif-hdr">⊙ SYSTEM STATUS</div><div class="notif-row ni-warn">● Last sample: 2026-06-07 17:32:11 (1 hr 40 min ago)</div><div class="notif-row ni-warn">▲ ISO class: ISO 7 — marginal (target: ISO 6)</div><div class="notif-row ni-warn">▲ ≥0.5µm 57,559/m³ — exceeds ISO 6 (35 200)</div><div class="notif-row ni-alert">▲ ≥0.3µm 2,728,244/m³ — above contamination threshold</div><div class="notif-row ni-ok">● Laser: OK</div><div class="notif-row ni-ok">● Flow sensor: OK</div><div class="notif-row ni-ok">● RH 62% — nominal</div><div class="notif-row ni-ok">● Temp 18.9°C / 66°F — nominal</div><div class="notif-row ni-mute">○ No alerts emailed in last 24 hr</div></div></div>
+  <div class="notif-wrap"><button class="notif-btn" onclick="document.getElementById('notif-drop').classList.toggle('open')">⊙ ALERTS <span style="color:#f87171">&#9679;</span></button><div class="notif-drop" id="notif-drop"><div class="notif-hdr">⊙ SYSTEM STATUS</div><div class="notif-row ni-warn">● Last sample: 2026-06-07 17:32:11 (1 hr 47 min ago)</div><div class="notif-row ni-warn">▲ ISO class: ISO 7 — marginal (target: ISO 6)</div><div class="notif-row ni-warn">▲ ≥0.5µm 57,559/m³ — exceeds ISO 6 (35 200)</div><div class="notif-row ni-alert">▲ ≥0.3µm 2,728,244/m³ — above contamination threshold</div><div class="notif-row ni-ok">● Laser: OK</div><div class="notif-row ni-ok">● Flow sensor: OK</div><div class="notif-row ni-ok">● RH 62% — nominal</div><div class="notif-row ni-ok">● Temp 18.9°C / 66°F — nominal</div><div class="notif-row ni-mute">○ No alerts emailed in last 24 hr</div></div></div>
   <div class="iso-badge" style="color:#facc15;border-color:#facc15;margin-left:14px;">ISO&nbsp;7</div>
 </div>
 
@@ -505,7 +505,7 @@ function _toLocalStr(date) {
 }
 
 // ── Shared constants / state ──────────────────────────────────────────────────
-const MIN_SPAN_MS = 30 * 60 * 1000;   // 30 min hard floor for zoom-in
+const MIN_SPAN_MS = 60 * 60 * 1000;   // 1 hour hard floor for zoom-in
 
 let _zooming = false;   // re-entrancy guard — blocks recursive plotly_relayout
 
@@ -523,8 +523,11 @@ function _clampSpan(divId, x0str, x1str) {
   Plotly.relayout(divId, {
     'xaxis.range[0]': _toLocalStr(new Date(mid - MIN_SPAN_MS / 2)),
     'xaxis.range[1]': _toLocalStr(new Date(mid + MIN_SPAN_MS / 2)),
+  }).then(function () {
+    _zooming = false;
+  }).catch(function () {
+    _zooming = false;
   });
-  _zooming = false;
 }
 
 // ── Left-edge handler (zoom-out expansion OR 7-day hard stop) ─────────────────
@@ -553,8 +556,11 @@ function _handleLeftEdge(divId, x0str) {
     const snapTo = getLeftBound(divId, mins);
     if (!snapTo) return;
     _zooming = true;
-    Plotly.relayout(divId, { 'xaxis.range[0]': snapTo });
-    _zooming = false;
+    Plotly.relayout(divId, { 'xaxis.range[0]': snapTo }).then(function () {
+      _zooming = false;
+    }).catch(function () {
+      _zooming = false;
+    });
   }
 }
 
