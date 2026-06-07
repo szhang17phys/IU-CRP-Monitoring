@@ -1350,8 +1350,23 @@ def push_to_github(repo_dir, csv_path):
         log(f"CSV not yet created, skipping copy")
 
     # git add + commit + push
+    # Only stage known data-output files — never source code or untracked files.
+    # Build list dynamically so a missing file (e.g. live.csv before first sync)
+    # doesn't cause git add to fail.
+    _data_files = [
+        'data/live.csv',
+        'data/env_live.csv',
+        'data/session_baseline.txt',
+        'index.html',
+    ]
+    _to_stage = [f for f in _data_files
+                 if os.path.exists(os.path.join(repo_dir, f))]
+    if not _to_stage:
+        log("No data output files to stage — skipping push")
+        return True
+
     cmds = [
-        ['git', '-C', repo_dir, 'add', '-A'],
+        ['git', '-C', repo_dir, 'add'] + _to_stage,
         ['git', '-C', repo_dir, 'commit', '-m',
          f'Auto-update {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'],
         ['git', '-C', repo_dir, 'push', GITHUB_REMOTE, GITHUB_BRANCH],
@@ -1592,11 +1607,16 @@ def mode_live():
 
 
 def mode_trim():
-    """Flush new records to archive then erase counter if above TRIM_CAP."""
+    """Flush new records to archive then erase counter if above TRIM_CAP.
+
+    Delegates entirely to mode_sync(), which already handles:
+      • counter_state.json-based last-synced tracking
+      • post-erase counter-reset detection
+      • auto-erase when total > TRIM_CAP
+    trim_counter.py is kept as a standalone emergency tool only.
+    """
     log(f"MODE: --trim  (cap={TRIM_CAP})")
-    import trim_counter as _tc
-    _tc.OUTPUT_CSV = ARCHIVE_CSV   # flush to the permanent archive
-    return _tc.trim_if_full(cap=TRIM_CAP)
+    return mode_sync()
 
 
 def mode_dashboard():
