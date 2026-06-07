@@ -168,10 +168,17 @@ function updateStats(i) {
 
 // ── Main render function ──────────────────────────────────────────────────────
 function filterAndRender() {
-  const mins = parseInt(document.getElementById('sel-range').value);
+  const sel  = document.getElementById('sel-range');
+  const mins = parseInt(sel.value);
   const i    = sliceIdx(mins);
   const ts   = TS.slice(i);
   const gaps = gapShapes(ts);
+
+  // When the dropdown is at its maximum option (Last 7 days), set xaxis.minallowed
+  // to the first data point so Plotly physically prevents zooming/panning further
+  // left.  Below max, leave minallowed unset so the expansion listener can fire.
+  const isAtMax  = sel.selectedIndex >= sel.options.length - 1;
+  const xBounds  = (isAtMax && ts.length > 0) ? { minallowed: ts[0] } : {};
 
   // ── Particle count chart (log scale) ─────────────────────────────────────
   // yaxis.fixedrange: true  →  +/- and scroll-zoom only move the X (time) axis.
@@ -185,7 +192,7 @@ function filterAndRender() {
         range:      COUNTS_Y_RANGE,
         fixedrange: true,
       }),
-      xaxis:       Object.assign({}, DARK.xaxis, { title: '' }),
+      xaxis:       Object.assign({}, DARK.xaxis, { title: '' }, xBounds),
       margin:      { l: 60, r: 72, t: 30, b: 50 },
       shapes:      [...gaps, ...isoShapes()],
       annotations: isoAnnotations(),
@@ -201,7 +208,7 @@ function filterAndRender() {
         autorange:  false,
         fixedrange: true,
       }),
-      xaxis:  Object.assign({}, DARK.xaxis, { title: '' }),
+      xaxis:  Object.assign({}, DARK.xaxis, { title: '' }, xBounds),
       shapes: gaps,
     }), PLOTLY_CFG);
 
@@ -235,6 +242,10 @@ function filterAndRender() {
     const j   = LIVE_TS.findIndex(t => new Date(t) >= cut);
     return j < 0 ? LIVE_TS.length - 1 : j;
   })();
+  // Env chart uses its own data array (LIVE_TS), so compute its own minallowed.
+  const envXBounds = (isAtMax && LIVE_TS.length > livei)
+    ? { minallowed: LIVE_TS[livei] } : {};
+
   Plotly.react('chart-env', [
     { x: LIVE_TS.slice(livei), y: TEMP_F.slice(livei), name: 'Temperature (°F)',
       type: 'scatter', mode: 'lines',
@@ -244,7 +255,7 @@ function filterAndRender() {
       line: { color: '#4ecdc4', width: 2 }, yaxis: 'y2' },
   ], Object.assign({}, DARK, {
     margin: { l: 60, r: 70, t: 30, b: 50 },
-    xaxis:  Object.assign({}, DARK.xaxis, { title: '' }),
+    xaxis:  Object.assign({}, DARK.xaxis, { title: '' }, envXBounds),
     yaxis:  Object.assign({}, DARK.yaxis, {
       title:      'Temperature (°F)',
       autorange:  false,
