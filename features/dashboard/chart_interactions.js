@@ -14,30 +14,7 @@
 //      chart reloads with more data.  Two intermediate steps (2 days, 3 days)
 //      are inserted into the dropdown so expansion is gradual.
 
-// ── Ensure dropdown has intermediate expansion steps ──────────────────────────
-// Adds "Last 2 days" and "Last 3 days" between the existing 24 hr and 7 days
-// options so zoom-out expansion is gradual.  Done in JS so particle_plus.py
-// does not need to change.
-(function () {
-  const sel = document.getElementById('sel-range');
-  const existing = new Set(Array.from(sel.options).map(o => parseInt(o.value)));
-  const extra = [
-    { value: 2880,  label: 'Last 2 days' },
-    { value: 4320,  label: 'Last 3 days' },
-  ];
-  extra.forEach(({ value, label }) => {
-    if (existing.has(value)) return;
-    const opt = document.createElement('option');
-    opt.value = value;
-    opt.textContent = label;
-    // Insert in ascending order
-    let before = null;
-    for (let i = 0; i < sel.options.length; i++) {
-      if (parseInt(sel.options[i].value) > value) { before = sel.options[i]; break; }
-    }
-    sel.add(opt, before);
-  });
-})();
+// (Dynamic dropdown insertion removed, options now defined in particle_plus.py HTML template)
 
 // ── Stable Y ranges — computed ONCE from the full dataset at page load ────────
 // Using all data (not the current time slice) means Y never jumps when the
@@ -93,11 +70,21 @@ const PLOTLY_CFG = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+function sliceIdxForArray(tsArray, mins) {
+  if (!mins || tsArray.length === 0) return 0;
+  const cut = new Date(new Date(tsArray[tsArray.length - 1]) - mins * 60000);
+  const i   = tsArray.findIndex(t => new Date(t) >= cut);
+  return i < 0 ? tsArray.length - 1 : i;
+}
+
 function sliceIdx(mins) {
-  if (!mins || TS.length === 0) return 0;
-  const cut = new Date(new Date(TS[TS.length - 1]) - mins * 60000);
-  const i   = TS.findIndex(t => new Date(t) >= cut);
-  return i < 0 ? TS.length - 1 : i;
+  return sliceIdxForArray(TS, mins);
+}
+
+function getLeftBound(divId, mins) {
+  const tsArray = (divId === 'chart-env') ? LIVE_TS : TS;
+  const idx = sliceIdxForArray(tsArray, mins);
+  return tsArray[idx] || null;
 }
 
 function sliceTraces(traces, i) {
@@ -243,11 +230,7 @@ function filterAndRender() {
   // so neither axis jumps when the time window or zoom changes.
   // fixedrange: true on both Y axes — +/- and scroll only move the X axis,
   // keeping the temp and RH scales stable for comparison across sessions.
-  const livei = (LIVE_TS.length === 0 || !mins) ? 0 : (() => {
-    const cut = new Date(new Date(LIVE_TS[LIVE_TS.length - 1]) - mins * 60000);
-    const j   = LIVE_TS.findIndex(t => new Date(t) >= cut);
-    return j < 0 ? LIVE_TS.length - 1 : j;
-  })();
+  const livei = sliceIdxForArray(LIVE_TS, mins);
   // Env chart uses LIVE_TS — same logic: maxallowed always set, minallowed only at max.
   const envXBounds = LIVE_TS.length > livei ? Object.assign(
     { maxallowed: LIVE_TS[LIVE_TS.length - 1] },
@@ -282,13 +265,6 @@ function filterAndRender() {
     },
   }), PLOTLY_CFG);
 
-  // Update per-chart left bounds used by the zoom listener to enforce the
-  // 7-day hard stop.  Set only at max dropdown so the expansion listener can
-  // still fire at smaller ranges (it checks sel.selectedIndex < max).
-  _leftBound['chart-counts'] = (isAtMax && ts.length > 0)           ? ts[0]          : null;
-  _leftBound['chart-pm']     = (isAtMax && ts.length > 0)           ? ts[0]          : null;
-  _leftBound['chart-env']    = (isAtMax && LIVE_TS.length > livei)  ? LIVE_TS[livei] : null;
-
   updateStats(i);
 }
 
@@ -298,97 +274,90 @@ function filterAndRender() {
 //
 //   Zoom-out expansion   When X left edge crosses the data-window start and
 //                        we are not yet at the 7-day max, step the dropdown
-//                        up and reload.
+//                        up and reload all charts.
 //
-//   Left hard stop       Two layers:
-//     Layout layer       minallowed in the Plotly layout (set at max only).
-//     Listener layer     _leftBound[divId] — when x0 < leftBound the listener
-//                        snaps the axis back.  Catches cases where Plotly's
-//                        minallowed alone is insufficient.
+//   Left hard stop       At 7-day max, snap x0 back to TS[sliceIdx(mins)]
+//                        (first timestamp in the current window), computed
+//                        fresh from the data at event time — no stored state.
 //
-//   Right hard stop      maxallowed always set to the latest sample (layout).
+//   Right hard stop      maxallowed in the layout (always the latest sample).
 //
-//   Zoom-in limit        Visible span < MIN_SPAN_MS (30 min ≈ 10–12 clicks
-//                        from 24 h) → snap back to MIN_SPAN_MS.
+//   Zoom-in limit        Visible span < 1 min → snap back to 1 min centred.
+//
+// All corrections call Plotly.relayout() synchronously (no requestAnimationFrame).
+// The _zooming flag blocks the recursive plotly_relayout that Plotly emits
+// during the correction, making the synchronous call safe.
+// rAF was removed because it introduced a race: the user's scroll wheel fires
+// many events before the deferred frame fires, sending the axis to sub-second
+// before the correction runs.
 
 // ── Date helpers ─────────────────────────────────────────────────────────────
 // Plotly relayout events return timestamps as "YYYY-MM-DD HH:MM:SS.mmm"
-// (space-separated).  The space makes it invalid ISO 8601, so new Date() may
-// return NaN in strict engines.  Replace the space with T before parsing.
+// (space-separated, not valid ISO 8601).  Replace the space with T so that
+// new Date() parses reliably.  Numeric epoch values are handled by the else branch.
 function _parseDate(str) {
   if (typeof str !== 'string') return new Date(+str);
   return new Date(str.replace(' ', 'T'));
 }
 
-// Format a JS Date as "YYYY-MM-DD HH:MM:SS" in LOCAL time.
-// This matches the format Python writes for timestamps in the CSV, so
-// Plotly interprets the clamped range in the same timezone as the data.
+// Format a JS Date as "YYYY-MM-DD HH:MM:SS" in LOCAL time, matching the
+// Python-generated CSV timestamp format so Plotly reads it in the correct timezone.
 function _toLocalStr(date) {
   const p = n => String(n).padStart(2, '0');
   return date.getFullYear() + '-' + p(date.getMonth() + 1) + '-' + p(date.getDate())
        + ' ' + p(date.getHours()) + ':' + p(date.getMinutes()) + ':' + p(date.getSeconds());
 }
 
-// ── Shared state ─────────────────────────────────────────────────────────────
+// ── Shared constants / state ──────────────────────────────────────────────────
 const MIN_SPAN_MS = 30 * 60 * 1000;   // 30 min hard floor for zoom-in
 
-// Per-chart left boundary string (data format).  Null = no hard stop (expansion allowed).
-// Updated by filterAndRender() every render; read by the zoom listener.
-const _leftBound = { 'chart-counts': null, 'chart-pm': null, 'chart-env': null };
-
-let _zooming = false;   // shared guard — prevents re-entrant zoom corrections
+let _zooming = false;   // re-entrancy guard — blocks recursive plotly_relayout
 
 // ── Zoom-in clamp ─────────────────────────────────────────────────────────────
+// If the visible span drops below the minimum span, snap back to minimum span centred on
+// the current midpoint.  Called synchronously — Plotly.relayout fires another
+// plotly_relayout event but _zooming blocks it before it can re-enter here.
 function _clampSpan(divId, x0str, x1str) {
   if (_zooming) return;
-  try {
-    const x0ms = _parseDate(x0str).getTime();
-    const x1ms = _parseDate(x1str).getTime();
-    if (isNaN(x0ms) || isNaN(x1ms)) return;
-    const span = x1ms - x0ms;
-    if (span >= MIN_SPAN_MS) return;
-    _zooming = true;
-    const mid = (x0ms + x1ms) / 2;
-    const r0  = _toLocalStr(new Date(mid - MIN_SPAN_MS / 2));
-    const r1  = _toLocalStr(new Date(mid + MIN_SPAN_MS / 2));
-    requestAnimationFrame(function () {
-      Plotly.relayout(divId, { 'xaxis.range[0]': r0, 'xaxis.range[1]': r1 });
-      _zooming = false;
-    });
-  } catch (e) {
-    _zooming = false;   // never leave the flag stuck on error
-  }
+  const x0ms = _parseDate(x0str).getTime();
+  const x1ms = _parseDate(x1str).getTime();
+  if (isNaN(x0ms) || isNaN(x1ms) || x1ms - x0ms >= MIN_SPAN_MS) return;
+  _zooming = true;
+  const mid = (x0ms + x1ms) / 2;
+  Plotly.relayout(divId, {
+    'xaxis.range[0]': _toLocalStr(new Date(mid - MIN_SPAN_MS / 2)),
+    'xaxis.range[1]': _toLocalStr(new Date(mid + MIN_SPAN_MS / 2)),
+  });
+  _zooming = false;
 }
 
-// ── Left-edge handler (zoom-out expansion OR hard-stop clamp) ─────────────────
+// ── Left-edge handler (zoom-out expansion OR 7-day hard stop) ─────────────────
+// x0str is the current left edge of the X axis from the relayout event.
 function _handleLeftEdge(divId, x0str) {
-  if (_zooming || !TS.length) return;
-  try {
-    const sel       = document.getElementById('sel-range');
-    const dataEnd   = _parseDate(TS[TS.length - 1]);
-    const dataStart = new Date(dataEnd.getTime() - parseInt(sel.value) * 60 * 1000);
-    const x0        = _parseDate(x0str);
-    if (isNaN(x0.getTime())) return;
+  if (_zooming) return;
+  const sel     = document.getElementById('sel-range');
+  const mins    = parseInt(sel.value);
+  const x0ms    = _parseDate(x0str).getTime();
+  if (isNaN(x0ms)) return;
 
-    if (x0 >= dataStart) return;   // within the current window — nothing to do
+  const tsArray = (divId === 'chart-env') ? LIVE_TS : TS;
+  if (!tsArray.length) return;
+  const dataEndMs   = _parseDate(tsArray[tsArray.length - 1]).getTime();
+  const dataStartMs = dataEndMs - mins * 60 * 1000;
+  if (x0ms >= dataStartMs) return;   // within window — nothing to do
 
-    if (sel.selectedIndex < sel.options.length - 1) {
-      // Not at max: expand the time range one step
-      _zooming = true;
-      sel.selectedIndex++;
-      filterAndRender();
-      _zooming = false;
-    } else {
-      // At 7-day max: snap back to the stored left boundary for this chart
-      const lb = _leftBound[divId];
-      if (!lb) return;
-      _zooming = true;
-      requestAnimationFrame(function () {
-        Plotly.relayout(divId, { 'xaxis.range[0]': lb });
-        _zooming = false;
-      });
-    }
-  } catch (e) {
+  if (sel.selectedIndex < sel.options.length - 1) {
+    // Below max: step the dropdown up and reload
+    _zooming = true;
+    sel.selectedIndex++;
+    filterAndRender();
+    _zooming = false;
+  } else {
+    // At max (7-day): snap x0 back to the first timestamp in the current window.
+    const snapTo = getLeftBound(divId, mins);
+    if (!snapTo) return;
+    _zooming = true;
+    Plotly.relayout(divId, { 'xaxis.range[0]': snapTo });
     _zooming = false;
   }
 }
@@ -397,7 +366,9 @@ function _handleLeftEdge(divId, x0str) {
 window._attachZoomListeners = function () {
   ['chart-counts', 'chart-pm', 'chart-env'].forEach(function (divId) {
     document.getElementById(divId).on('plotly_relayout', function (ev) {
-      // Plotly may report the X range as individual keys OR as an array.
+      // Handle both Plotly event formats for X range:
+      //   { 'xaxis.range[0]': v, 'xaxis.range[1]': v }  (interactive zoom/pan)
+      //   { 'xaxis.range': [v, v] }                      (some programmatic calls)
       let x0 = ev['xaxis.range[0]'];
       let x1 = ev['xaxis.range[1]'];
       if (x0 === undefined && Array.isArray(ev['xaxis.range'])) {

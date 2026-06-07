@@ -1109,7 +1109,6 @@ def generate_dashboard_html(csv_path, output_path):
   <div class="ctrl-group">
     <label>Time Range</label>
     <select id="sel-range" onchange="filterAndRender()">
-      <option value="0">All data (30 days)</option>
       <option value="30">Last 30 min</option>
       <option value="60">Last 1 hr</option>
       <option value="120">Last 2 hr</option>
@@ -1118,6 +1117,7 @@ def generate_dashboard_html(csv_path, output_path):
       <option value="720">Last 12 hr</option>
       <option value="1440" selected>Last 24 hr</option>
       <option value="2880">Last 2 days</option>
+      <option value="4320">Last 3 days</option>
       <option value="10080">Last 7 days</option>
     </select>
   </div>
