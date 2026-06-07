@@ -26,7 +26,7 @@ from pymodbus.client import ModbusTcpClient
 COUNTER_IP   = '10.66.66.68'
 PORT         = 502
 
-BASE_DIR         = '/home/rraut/particle_plus'   # git repo root on noether
+BASE_DIR         = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR         = f'{BASE_DIR}/data'
 ARCHIVE_CSV      = f'{DATA_DIR}/measurement_archive.csv'  # all data, local only
 LIVE_CSV         = f'{DATA_DIR}/live.csv'                 # 30-day particle window, GitHub
