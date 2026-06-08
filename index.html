@@ -142,9 +142,9 @@
       <option value="10080">Last 7 days</option>
     </select>
   </div>
-  <div class="updated">Last pushed: 2026-06-07 19:56:05</div>
+  <div class="updated">Last pushed: 2026-06-07 21:18:25</div>
   <div style="flex:1"></div>
-  <div class="notif-wrap"><button class="notif-btn" onclick="document.getElementById('notif-drop').classList.toggle('open')">⊙ ALERTS <span style="color:#f87171">&#9679;</span></button><div class="notif-drop" id="notif-drop"><div class="notif-hdr">⊙ SYSTEM STATUS</div><div class="notif-row ni-warn">● Last sample: 2026-06-07 17:32:11 (2 hr 23 min ago)</div><div class="notif-row ni-warn">▲ ISO class: ISO 7 — marginal (target: ISO 6)</div><div class="notif-row ni-warn">▲ ≥0.5µm 57,559/m³ — exceeds ISO 6 (35 200)</div><div class="notif-row ni-alert">▲ ≥0.3µm 2,728,244/m³ — above contamination threshold</div><div class="notif-row ni-ok">● Laser: OK</div><div class="notif-row ni-ok">● Flow sensor: OK</div><div class="notif-row ni-ok">● RH 62% — nominal</div><div class="notif-row ni-ok">● Temp 18.9°C / 66°F — nominal</div><div class="notif-row ni-mute">○ No alerts emailed in last 24 hr</div></div></div>
+  <div class="notif-wrap"><button class="notif-btn" onclick="document.getElementById('notif-drop').classList.toggle('open')">⊙ ALERTS <span style="color:#f87171">&#9679;</span></button><div class="notif-drop" id="notif-drop"><div class="notif-hdr">⊙ SYSTEM STATUS</div><div class="notif-row ni-warn">● Last sample: 2026-06-07 17:32:11 (3 hr 46 min ago)</div><div class="notif-row ni-warn">▲ ISO class: ISO 7 — marginal (target: ISO 6)</div><div class="notif-row ni-warn">▲ ≥0.5µm 57,559/m³ — exceeds ISO 6 (35 200)</div><div class="notif-row ni-alert">▲ ≥0.3µm 2,728,244/m³ — above contamination threshold</div><div class="notif-row ni-ok">● Laser: OK</div><div class="notif-row ni-ok">● Flow sensor: OK</div><div class="notif-row ni-ok">● RH 62% — nominal</div><div class="notif-row ni-ok">● Temp 18.9°C / 66°F — nominal</div><div class="notif-row ni-mute">○ No alerts emailed in last 24 hr</div></div></div>
   <div class="iso-badge" style="color:#facc15;border-color:#facc15;margin-left:14px;">ISO&nbsp;7</div>
 </div>
 
@@ -514,7 +514,7 @@ function _toLocalStr(date) {
 }
 
 // ── Shared constants / state ──────────────────────────────────────────────────
-const MIN_SPAN_MS = 60 * 60 * 1000;   // 1 hour hard floor for zoom-in
+const MIN_SPAN_MS = 10 * 60 * 1000;   // 10 minutes hard floor for zoom-in (approx 12 steps from 24h)
 
 let _zooming = false;   // re-entrancy guard — blocks recursive plotly_relayout
 
@@ -531,20 +531,26 @@ function _enforceZoomConstraints(divId, targetX0, targetX1, x0orig, x1orig) {
   if (!tsArray.length) return;
 
   const dataEndMs = _parseDate(tsArray[tsArray.length - 1]).getTime();
+  const dataStartMs = _parseDate(tsArray[0]).getTime();
   let x0 = targetX0;
   let x1 = targetX1;
   let span = x1 - x0;
 
   // 1. Zoom-in clamp (floor)
   if (span < MIN_SPAN_MS) {
-    span = MIN_SPAN_MS;
-    const mid = (x0 + x1) / 2;
-    x0 = mid - MIN_SPAN_MS / 2;
-    x1 = mid + MIN_SPAN_MS / 2;
+    console.log(`[Zoom] ${divId} zoom-in limit hit! Clamping to floor.`);
+    span = Math.min(MIN_SPAN_MS, dataEndMs - dataStartMs);
+    x1 = targetX1;
+    x0 = x1 - span;
+    if (x0 < dataStartMs) {
+      x0 = dataStartMs;
+      x1 = x0 + span;
+    }
   }
 
   // 2. Right hard stop (never zoom past latest data)
   if (x1 > dataEndMs) {
+    console.log(`[Zoom] ${divId} right hard stop hit! Snapping to latest data.`);
     x0 -= (x1 - dataEndMs);
     x1 = dataEndMs;
   }
@@ -552,11 +558,12 @@ function _enforceZoomConstraints(divId, targetX0, targetX1, x0orig, x1orig) {
   // 3. Zoom-out expansion / left hard stop
   const sel = document.getElementById('sel-range');
   const mins = parseInt(sel.value);
-  const dataStartMs = dataEndMs - mins * 60 * 1000;
+  const minAllowedTime = Math.max(dataEndMs - mins * 60 * 1000, dataStartMs);
 
-  if (x0 < dataStartMs) {
+  if (x0 < minAllowedTime) {
     if (sel.selectedIndex < sel.options.length - 1) {
       // Below max: step the dropdown up and reload
+      console.log(`[Zoom] ${divId} left edge crossed current window! Expanding dropdown from ${mins} mins.`);
       _zooming = true;
       sel.selectedIndex++;
       filterAndRender();
@@ -564,17 +571,15 @@ function _enforceZoomConstraints(divId, targetX0, targetX1, x0orig, x1orig) {
       return;
     } else {
       // At max (7-day): snap back to left boundary
-      const snapTo = getLeftBound(divId, mins);
-      if (snapTo) {
-        const lbMs = _parseDate(snapTo).getTime();
-        x0 = lbMs;
-        x1 = Math.min(x0 + span, dataEndMs);
-      }
+      console.log(`[Zoom] ${divId} zoom-out limit hit! Snapping to oldest allowed data.`);
+      x0 = minAllowedTime;
+      x1 = Math.min(x0 + span, dataEndMs);
     }
   }
 
   // If computed range differs from the original layout range, perform Plotly relayout.
   if (Math.abs(x0 - x0orig) > 1000 || Math.abs(x1 - x1orig) > 1000) {
+    console.log(`[Zoom] ${divId} performing relayout: [${_toLocalStr(new Date(x0))} to ${_toLocalStr(new Date(x1))}]`);
     _zooming = true;
     Plotly.relayout(divId, {
       'xaxis.range[0]': _toLocalStr(new Date(x0)),
@@ -623,14 +628,15 @@ window._attachZoomListeners = function () {
       let targetX1 = x1ms;
 
       const tsArray = (divId === 'chart-env') ? LIVE_TS : TS;
-      if (tsArray.length && isZoomIn) {
+      if (tsArray.length && isZoomIn && prev) {
         const dataEndMs = _parseDate(tsArray[tsArray.length - 1]).getTime();
-        // If the previous right edge was anchored near the most recent data (within 5 mins),
-        // lock the zoom-in focus to the right-most part (most recent data).
-        if (prev && (dataEndMs - prev.x1 < 5 * 60 * 1000)) {
-          targetX1 = dataEndMs;
-          targetX0 = dataEndMs - newSpan;
+        // Prefer towards the right side (towards the latest data) when zooming in
+        let rightEdge = prev.x1;
+        if (dataEndMs - rightEdge < 5 * 60 * 1000) {
+          rightEdge = dataEndMs;
         }
+        targetX1 = rightEdge;
+        targetX0 = rightEdge - newSpan;
       }
 
       _enforceZoomConstraints(divId, targetX0, targetX1, x0ms, x1ms);
