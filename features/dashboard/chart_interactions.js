@@ -72,8 +72,8 @@ const PLOTLY_CFG = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function sliceIdxForArray(tsArray, mins) {
   if (!mins || tsArray.length === 0) return 0;
-  const cut = new Date(new Date(tsArray[tsArray.length - 1]) - mins * 60000);
-  const i   = tsArray.findIndex(t => new Date(t) >= cut);
+  const cut = new Date(_parseDate(tsArray[tsArray.length - 1]).getTime() - mins * 60000);
+  const i   = tsArray.findIndex(t => _parseDate(t) >= cut);
   return i < 0 ? tsArray.length - 1 : i;
 }
 
@@ -98,7 +98,7 @@ function gapShapes(ts) {
   const GAP_THRESH_MS = 90 * 60 * 1000;
   const shapes = [];
   for (let k = 1; k < ts.length; k++) {
-    if (new Date(ts[k]) - new Date(ts[k - 1]) > GAP_THRESH_MS) {
+    if (_parseDate(ts[k]) - _parseDate(ts[k - 1]) > GAP_THRESH_MS) {
       shapes.push({
         type: 'rect', xref: 'x', yref: 'paper',
         x0: ts[k - 1], x1: ts[k], y0: 0, y1: 1,
@@ -176,7 +176,7 @@ function filterAndRender() {
   // ── Particle count chart (log scale) ─────────────────────────────────────
   // yaxis.fixedrange: true  →  +/- and scroll-zoom only move the X (time) axis.
   // autorange: false + COUNTS_Y_RANGE  →  Y never jumps on dropdown changes.
-  Plotly.react('chart-counts', sliceTraces(COUNTS, i),
+  const p1 = Plotly.react('chart-counts', sliceTraces(COUNTS, i),
     Object.assign({}, DARK, {
       yaxis: Object.assign({}, DARK.yaxis, {
         title:      'Counts / m³',
@@ -192,7 +192,7 @@ function filterAndRender() {
     }), PLOTLY_CFG);
 
   // ── PM mass chart (linear scale) ─────────────────────────────────────────
-  Plotly.react('chart-pm', sliceTraces(PM, i),
+  const p2 = Plotly.react('chart-pm', sliceTraces(PM, i),
     Object.assign({}, DARK, {
       yaxis: Object.assign({}, DARK.yaxis, {
         title:      'μg / m³',
@@ -208,7 +208,7 @@ function filterAndRender() {
   // ── Size distribution bar chart ───────────────────────────────────────────
   const _distMax    = (DIST[0] && DIST[0].y.length) ? Math.max(...DIST[0].y) : 100;
   const _distLogMax = Math.log10(Math.max(_distMax, 1)) + 0.3;
-  Plotly.react('chart-dist', DIST,
+  const p3 = Plotly.react('chart-dist', DIST,
     Object.assign({}, DARK, {
       showlegend: false,
       bargap:     0.3,
@@ -237,7 +237,7 @@ function filterAndRender() {
     isAtMax ? { minallowed: LIVE_TS[livei] } : {}
   ) : {};
 
-  Plotly.react('chart-env', [
+  const p4 = Plotly.react('chart-env', [
     { x: LIVE_TS.slice(livei), y: TEMP_F.slice(livei), name: 'Temperature (°F)',
       type: 'scatter', mode: 'lines',
       line: { color: '#ff6b6b', width: 2 }, yaxis: 'y' },
@@ -275,6 +275,8 @@ function filterAndRender() {
       _updatePrevRange(divId, _parseDate(tsArray[idx]).getTime(), _parseDate(tsArray[tsArray.length - 1]).getTime());
     }
   });
+
+  return Promise.all([p1, p2, p3, p4]);
 }
 
 // ── Zoom behaviour: expansion, left/right hard stops, zoom-in limit ───────────
@@ -318,7 +320,7 @@ function _toLocalStr(date) {
 }
 
 // ── Shared constants / state ──────────────────────────────────────────────────
-const MIN_SPAN_MS = 60 * 60 * 1000;   // 1 hour hard floor for zoom-in
+const MIN_SPAN_MS = 10 * 60 * 1000;   // 10 minutes hard floor for zoom-in (approx 12 steps from 24h)
 
 let _zooming = false;   // re-entrancy guard — blocks recursive plotly_relayout
 
@@ -335,20 +337,26 @@ function _enforceZoomConstraints(divId, targetX0, targetX1, x0orig, x1orig) {
   if (!tsArray.length) return;
 
   const dataEndMs = _parseDate(tsArray[tsArray.length - 1]).getTime();
+  const dataStartMs = _parseDate(tsArray[0]).getTime();
   let x0 = targetX0;
   let x1 = targetX1;
   let span = x1 - x0;
 
   // 1. Zoom-in clamp (floor)
   if (span < MIN_SPAN_MS) {
-    span = MIN_SPAN_MS;
-    const mid = (x0 + x1) / 2;
-    x0 = mid - MIN_SPAN_MS / 2;
-    x1 = mid + MIN_SPAN_MS / 2;
+    console.log(`[Zoom] ${divId} zoom-in limit hit! Clamping to floor.`);
+    span = Math.min(MIN_SPAN_MS, dataEndMs - dataStartMs);
+    x1 = targetX1;
+    x0 = x1 - span;
+    if (x0 < dataStartMs) {
+      x0 = dataStartMs;
+      x1 = x0 + span;
+    }
   }
 
   // 2. Right hard stop (never zoom past latest data)
   if (x1 > dataEndMs) {
+    console.log(`[Zoom] ${divId} right hard stop hit! Snapping to latest data.`);
     x0 -= (x1 - dataEndMs);
     x1 = dataEndMs;
   }
@@ -356,29 +364,31 @@ function _enforceZoomConstraints(divId, targetX0, targetX1, x0orig, x1orig) {
   // 3. Zoom-out expansion / left hard stop
   const sel = document.getElementById('sel-range');
   const mins = parseInt(sel.value);
-  const dataStartMs = dataEndMs - mins * 60 * 1000;
+  const minAllowedTime = Math.max(dataEndMs - mins * 60 * 1000, dataStartMs);
 
-  if (x0 < dataStartMs) {
+  if (x0 < minAllowedTime) {
     if (sel.selectedIndex < sel.options.length - 1) {
       // Below max: step the dropdown up and reload
+      console.log(`[Zoom] ${divId} left edge crossed current window! Expanding dropdown from ${mins} mins.`);
       _zooming = true;
       sel.selectedIndex++;
-      filterAndRender();
-      _zooming = false;
+      filterAndRender().then(function () {
+        _zooming = false;
+      }).catch(function () {
+        _zooming = false;
+      });
       return;
     } else {
       // At max (7-day): snap back to left boundary
-      const snapTo = getLeftBound(divId, mins);
-      if (snapTo) {
-        const lbMs = _parseDate(snapTo).getTime();
-        x0 = lbMs;
-        x1 = Math.min(x0 + span, dataEndMs);
-      }
+      console.log(`[Zoom] ${divId} zoom-out limit hit! Snapping to oldest allowed data.`);
+      x0 = minAllowedTime;
+      x1 = Math.min(x0 + span, dataEndMs);
     }
   }
 
   // If computed range differs from the original layout range, perform Plotly relayout.
   if (Math.abs(x0 - x0orig) > 1000 || Math.abs(x1 - x1orig) > 1000) {
+    console.log(`[Zoom] ${divId} performing relayout: [${_toLocalStr(new Date(x0))} to ${_toLocalStr(new Date(x1))}]`);
     _zooming = true;
     Plotly.relayout(divId, {
       'xaxis.range[0]': _toLocalStr(new Date(x0)),
@@ -427,14 +437,15 @@ window._attachZoomListeners = function () {
       let targetX1 = x1ms;
 
       const tsArray = (divId === 'chart-env') ? LIVE_TS : TS;
-      if (tsArray.length && isZoomIn) {
+      if (tsArray.length && isZoomIn && prev) {
         const dataEndMs = _parseDate(tsArray[tsArray.length - 1]).getTime();
-        // If the previous right edge was anchored near the most recent data (within 5 mins),
-        // lock the zoom-in focus to the right-most part (most recent data).
-        if (prev && (dataEndMs - prev.x1 < 5 * 60 * 1000)) {
-          targetX1 = dataEndMs;
-          targetX0 = dataEndMs - newSpan;
+        // Prefer towards the right side (towards the latest data) when zooming in
+        let rightEdge = prev.x1;
+        if (dataEndMs - rightEdge < 5 * 60 * 1000) {
+          rightEdge = dataEndMs;
         }
+        targetX1 = rightEdge;
+        targetX0 = rightEdge - newSpan;
       }
 
       _enforceZoomConstraints(divId, targetX0, targetX1, x0ms, x1ms);

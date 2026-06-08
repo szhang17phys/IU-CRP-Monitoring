@@ -595,7 +595,7 @@ def generate_dashboard_html(csv_path, output_path):
 
     # ── env snapshot CSV: counter only stores temp/RH in the live reading (record 0),
     #    not in historical records — read ENV_SNAPSHOT_CSV for the env chart/cards ──
-    live_cutoff = datetime.now() - timedelta(hours=24)
+    live_cutoff = datetime.now() - timedelta(days=8)
     live_ts      = []
     live_temp_f  = []
     live_rh_vals = []
