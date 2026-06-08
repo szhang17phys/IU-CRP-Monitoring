@@ -8,7 +8,9 @@ import os
 # ─── CONFIG ───────────────────────────────────────────────
 COUNTER_IP       = '10.66.66.68'
 PORT             = 502
-OUTPUT_CSV       = '/home/rraut/particle_plus/dashboard/particle_data_archive.csv'
+# Resolve paths relative to this script so it runs from any computer/cwd.
+BASE_DIR         = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_CSV       = os.path.join(BASE_DIR, 'data', 'measurement_archive.csv')
 ERASE_AFTER_SYNC = False   # set True only after confirming data looks correct
 # ──────────────────────────────────────────────────────────
 
