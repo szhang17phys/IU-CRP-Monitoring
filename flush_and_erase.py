@@ -8,7 +8,8 @@ SAFETY MODEL — the counter is erased ONLY when every one of these passes:
   1. We can connect to the counter.
   2. We can read the record count, and it is > 0.
      (A failed/again read ABORTS — it is never silently treated as "empty".)
-  3. EVERY record reads back successfully. Any failure → abort, nothing erased.
+  3. EVERY record reads back successfully AND its latched record_number matches
+     the record we asked for. Any failure → abort, nothing erased.
   4. The records are appended to the archive CSV, and the write is then
      VERIFIED by re-reading the file and confirming it grew by exactly the
      expected number of rows AND that those rows are the records we just read.
@@ -16,6 +17,12 @@ SAFETY MODEL — the counter is erased ONLY when every one of these passes:
      and the erase is itself verified (count returns to 0).
 
 At any anomaly the tool aborts WITHOUT erasing — data is never lost.
+
+NETWORK RESILIENCE: every modbus call is retried with exponential backoff and
+an automatic reconnect between attempts (TIMEOUT / MODBUS_RETRIES / READ_RETRIES
+below). This rides out a flaky link — but note that nothing can overcome heavy
+packet loss (e.g. ~77% loss seen from a cluster login node). Run this from a
+host with a stable path to the counter (e.g. noether / the cleanroom subnet).
 
 This script REUSES the proven modbus / CSV / erase functions from
 particle_plus.py, so the archive schema always matches the daemon's (no
@@ -31,6 +38,8 @@ import csv
 import time
 from datetime import datetime
 
+from pymodbus.client import ModbusTcpClient
+
 # Reuse the daemon's proven implementation (same decoders, same CSV schema,
 # same erase + sync-state reset). Python puts this script's directory on
 # sys.path, so this import works regardless of where you launch from.
@@ -41,12 +50,55 @@ COUNTER_IP       = pp.COUNTER_IP
 PORT             = pp.PORT
 OUTPUT_CSV       = pp.ARCHIVE_CSV     # same local-only archive the daemon writes
 ERASE_AFTER_SYNC = False              # set True ONLY after confirming the data
-READ_RETRIES     = 3                  # retries per modbus call on transient I/O
+
+# Network resilience knobs (tune up for a flaky link).
+TIMEOUT          = 10   # seconds per modbus request (particle_plus default = 5)
+MODBUS_RETRIES   = 5    # pymodbus internal retries per request
+READ_RETRIES     = 5    # our app-level retries (reconnect + exponential backoff)
+CONNECT_RETRIES  = 5    # attempts to (re)establish the TCP connection
+BACKOFF_MAX_S    = 8.0  # cap on the exponential backoff delay
 # ──────────────────────────────────────────────────────────
 
 
-def _retry(fn, *args, what='modbus call', retries=READ_RETRIES):
-    """Call fn(*args) with retries on transient errors; re-raise if all fail."""
+def connect(retries=CONNECT_RETRIES):
+    """Open a modbus connection with our tunables; retry with backoff."""
+    delay = 1.0
+    for attempt in range(1, retries + 1):
+        client = ModbusTcpClient(COUNTER_IP, port=PORT,
+                                 timeout=TIMEOUT, retries=MODBUS_RETRIES)
+        if client.connect():
+            return client
+        print(f"  [connect {attempt}/{retries}] could not reach "
+              f"{COUNTER_IP}:{PORT}")
+        try:
+            client.close()
+        except Exception:
+            pass
+        if attempt < retries:
+            time.sleep(delay)
+            delay = min(delay * 2, BACKOFF_MAX_S)
+    return None
+
+
+def _reconnect(client):
+    """Best-effort drop + re-open of the socket between retries."""
+    try:
+        client.close()
+        time.sleep(0.5)
+        if client.connect():
+            print("    reconnected")
+        else:
+            print("    reconnect failed (will retry)")
+    except Exception as e:
+        print(f"    reconnect error: {e}")
+
+
+def _retry(fn, *args, what='modbus call', retries=READ_RETRIES, client=None):
+    """Call fn(*args) with retries, exponential backoff, and reconnect.
+
+    Re-raises the last exception if every attempt fails.
+    """
+    delay = 1.0
     last = None
     for attempt in range(1, retries + 1):
         try:
@@ -54,7 +106,11 @@ def _retry(fn, *args, what='modbus call', retries=READ_RETRIES):
         except Exception as e:
             last = e
             print(f"  [retry {attempt}/{retries}] {what} failed: {e}")
-            time.sleep(1.0)
+            if attempt < retries:
+                if client is not None:
+                    _reconnect(client)
+                time.sleep(delay)
+                delay = min(delay * 2, BACKOFF_MAX_S)
     raise last
 
 
@@ -65,9 +121,11 @@ def safe_record_count(client):
     not talk to it — and None must NEVER lead to an erase.
     """
     try:
-        return _retry(pp.get_record_count, client, what='read record count')
+        return _retry(pp.get_record_count, client,
+                      what='read record count', client=client)
     except Exception as e:
-        print(f"  ERROR: could not read record count after {READ_RETRIES} tries: {e}")
+        print(f"  ERROR: could not read record count after {READ_RETRIES} "
+              f"tries: {e}")
         return None
 
 
@@ -80,29 +138,41 @@ def count_csv_rows(path):
     return max(0, n - 1)
 
 
+def _latch_and_read(client, i):
+    """Latch record i, read it back, and confirm it IS record i.
+
+    Verifying the returned record_number guards against a dropped latch-write
+    on a flaky link silently handing us the wrong/previous record.
+    """
+    pp.latch_record(client, i)
+    data = pp.read_latched_record(client)
+    if data is None:
+        raise RuntimeError(f'record {i}: empty / no response')
+    rn = data.get('record_number')
+    if str(rn) != str(i):
+        raise RuntimeError(f'latch mismatch: requested {i}, got record_number {rn}')
+    return data
+
+
 def read_all_records(client, total):
     """Read records 1..total. Returns (records, failed_indices)."""
     records, failed = [], []
     for i in range(1, total + 1):
         try:
-            pp.latch_record(client, i)
-            data = _retry(pp.read_latched_record, client, what=f'read record {i}')
+            data = _retry(_latch_and_read, client, i,
+                          what=f'record {i}', client=client)
         except Exception as e:
-            print(f"  [{i:4d}/{total}] EXCEPTION after retries: {e}")
+            print(f"  [{i:4d}/{total}] FAILED after retries: {e}")
             failed.append(i)
             continue
 
-        if data:
-            # Match the daemon's record schema exactly (sync_time is the final
-            # column in measurement_archive.csv).
-            data['sync_time'] = datetime.now().isoformat()
-            records.append(data)
-            print(f"  [{i:4d}/{total}] {data.get('date','?')} {data.get('time','?')}  "
-                  f"temp={data.get('temp_C','?')}C  RH={data.get('RH_pct','?')}%  "
-                  f"ch1_diff_m3={data.get('ch1_diff_m3','?')}")
-        else:
-            print(f"  [{i:4d}/{total}] empty/invalid record")
-            failed.append(i)
+        # Match the daemon's record schema exactly (sync_time is the final
+        # column in measurement_archive.csv).
+        data['sync_time'] = datetime.now().isoformat()
+        records.append(data)
+        print(f"  [{i:4d}/{total}] {data.get('date','?')} {data.get('time','?')}  "
+              f"temp={data.get('temp_C','?')}C  RH={data.get('RH_pct','?')}%  "
+              f"ch1_diff_m3={data.get('ch1_diff_m3','?')}")
 
     return records, failed
 
@@ -197,12 +267,14 @@ def main():
     print(f"  Target : {COUNTER_IP}:{PORT}")
     print(f"  Output : {OUTPUT_CSV}")
     print(f"  Erase  : {ERASE_AFTER_SYNC}")
+    print(f"  Net    : timeout={TIMEOUT}s, modbus_retries={MODBUS_RETRIES}, "
+          f"read_retries={READ_RETRIES}")
     print()
 
-    client = pp.connect()
+    client = connect()
     if client is None:
-        print("ERROR: could not connect to the particle counter. "
-              "Aborting (nothing erased).")
+        print(f"ERROR: could not connect to the particle counter after "
+              f"{CONNECT_RETRIES} tries. Aborting (nothing erased).")
         return 1
 
     print("Connected successfully")
