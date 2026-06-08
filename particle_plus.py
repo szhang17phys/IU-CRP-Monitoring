@@ -578,8 +578,8 @@ def generate_dashboard_html(csv_path, output_path):
         _plot_timestamps = timestamps
         _plot_records    = chart_records
 
-    ch_colors = ['#00b4d8', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6', '#1abc9c']
-    pm_colors = ['#ff6b6b', '#ff9f43', '#ffd32a', '#0be881', '#67e8f9', '#c084fc']
+    ch_colors = ['#1e293b', '#1d4ed8', '#dc2626', '#15803d', '#7c3aed', '#c2410c']
+    pm_colors = ['#1e293b', '#1d4ed8', '#dc2626', '#15803d', '#7c3aed', '#c2410c']
 
     ref = recent[0] if recent else {}
     ch_sizes = {}
@@ -689,14 +689,14 @@ def generate_dashboard_html(csv_path, output_path):
         {'x': _plot_timestamps, 'y': ch_counts[i],
          'name': f'\u2265{ch_sizes[i]}\u00b5m',
          'type': 'scatter', 'mode': 'lines',
-         'line': {'color': ch_colors[i-1], 'width': 2, 'shape': 'hv'}}
+         'line': {'color': ch_colors[i-1], 'width': 3, 'shape': 'hv'}}
         for i in range(1, 7)
     ])
     pm_traces_js = json.dumps([
         {'x': _plot_timestamps, 'y': ch_pm[i],
          'name': f'PM\u2265{ch_sizes[i]}\u00b5m',
          'type': 'scatter', 'mode': 'lines',
-         'line': {'color': pm_colors[i-1], 'width': 2, 'shape': 'hv'}}
+         'line': {'color': pm_colors[i-1], 'width': 3, 'shape': 'hv'}}
         for i in range(1, 7)
     ])
     raw_latest = [
@@ -711,7 +711,7 @@ def generate_dashboard_html(csv_path, output_path):
         'marker': {'color': ch_colors, 'line': {'color': '#334155', 'width': 1}},
         'text': [str(int(v)) if v > 0 else '0' for v in raw_latest],
         'textposition': 'outside',
-        'textfont': {'color': '#9ca3af', 'size': 11},
+        'textfont': {'color': '#475569', 'size': 11},
     }])
     ch1_counts_js = json.dumps(ch_counts[1])
     ch2_pm_js     = json.dumps(ch_pm[2])
@@ -727,11 +727,11 @@ def generate_dashboard_html(csv_path, output_path):
     # Colors match the \u22650.5 \u00b5m channel trace (#2ecc71 = ch2) since all limits
     # are defined at that size. ISO 6 is the exact channel color and boldest.
     _iso_ref_lines = [
-        {'y': 3520,     'label': 'ISO\u00a05',  'color': '#a7f3d0', 'width': 1.5, 'dash': 'dash', 'bold': False},
+        {'y': 3520,     'label': 'ISO\u00a05',  'color': '#81c784', 'width': 1.5, 'dash': 'dash', 'bold': False},
         {'y': 35200,    'label': 'ISO\u00a06',  'color': '#2ecc71', 'width': 2.5, 'dash': 'dash', 'bold': True},
-        {'y': 352000,   'label': 'ISO\u00a07',  'color': '#34d399', 'width': 1.5, 'dash': 'dash', 'bold': False},
-        {'y': 3520000,  'label': 'ISO\u00a08',  'color': '#10b981', 'width': 1.5, 'dash': 'dash', 'bold': False},
-        {'y': 35200000, 'label': 'ISO\u00a09',  'color': '#059669', 'width': 1.5, 'dash': 'dash', 'bold': False},
+        {'y': 352000,   'label': 'ISO\u00a07',  'color': '#27ae60', 'width': 1.5, 'dash': 'dash', 'bold': False},
+        {'y': 3520000,  'label': 'ISO\u00a08',  'color': '#1e8449', 'width': 1.5, 'dash': 'dash', 'bold': False},
+        {'y': 35200000, 'label': 'ISO\u00a09',  'color': '#115f2e', 'width': 1.5, 'dash': 'dash', 'bold': False},
     ]
     iso_lines_js = json.dumps(_iso_ref_lines)
 

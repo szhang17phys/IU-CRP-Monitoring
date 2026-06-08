@@ -46,17 +46,17 @@ const RH_Y_RANGE = _rhVals.length
 // ── Layout base shared by all charts ─────────────────────────────────────────
 const DARK = {
   paper_bgcolor: '#0f172a',
-  plot_bgcolor:  '#0f172a',
+  plot_bgcolor:  '#D1E8E2',
   font:      { color: '#9ca3af', family: 'Courier New, monospace', size: 11 },
   margin:    { l: 60, r: 20, t: 30, b: 50 },
   hovermode: 'x unified',
   hoverlabel: { bgcolor: '#1e293b', bordercolor: '#334155', font: { size: 11 } },
   legend: { bgcolor: 'rgba(0,0,0,0)', bordercolor: '#334155', borderwidth: 1,
             font: { size: 11 }, orientation: 'h', yanchor: 'bottom', y: 1.02, x: 0 },
-  xaxis: { gridcolor: '#1e293b', linecolor: '#334155', zerolinecolor: '#1e293b',
+  xaxis: { gridcolor: '#b2d1c9', linecolor: '#334155', zerolinecolor: '#93beb4',
            tickfont: { color: '#6b7280', size: 10 },
            title_font: { color: '#6b7280', size: 11 } },
-  yaxis: { gridcolor: '#1e293b', linecolor: '#334155', zerolinecolor: '#1e293b',
+  yaxis: { gridcolor: '#b2d1c9', linecolor: '#334155', zerolinecolor: '#93beb4',
            tickfont: { color: '#6b7280', size: 10 },
            title_font: { color: '#6b7280', size: 11 } },
 };
@@ -248,10 +248,10 @@ function filterAndRender() {
   const p4 = Plotly.react('chart-env', [
     { x: LIVE_TS.slice(livei), y: TEMP_F.slice(livei), name: 'Temperature (°F)',
       type: 'scatter', mode: 'lines',
-      line: { color: '#ff6b6b', width: 2 }, yaxis: 'y' },
+      line: { color: '#dc2626', width: 3 }, yaxis: 'y' },
     { x: LIVE_TS.slice(livei), y: RH_VALS.slice(livei), name: 'Humidity (%)',
       type: 'scatter', mode: 'lines',
-      line: { color: '#4ecdc4', width: 2 }, yaxis: 'y2' },
+      line: { color: '#1d4ed8', width: 3 }, yaxis: 'y2' },
   ], Object.assign({}, DARK, {
     margin: { l: 60, r: 70, t: 30, b: 50 },
     xaxis:  Object.assign({}, DARK.xaxis, { title: '' }, envXBounds),
@@ -267,7 +267,7 @@ function filterAndRender() {
       autorange:  false,
       range:      RH_Y_RANGE,
       fixedrange: true,
-      gridcolor:  '#1e293b', linecolor: '#334155',
+      gridcolor:  '#b2d1c9', linecolor: '#334155',
       tickfont:   { color: '#6b7280', size: 10 },
       title_font: { color: '#6b7280', size: 11 },
     },
