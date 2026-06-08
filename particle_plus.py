@@ -1083,11 +1083,11 @@ def generate_dashboard_html(csv_path, output_path):
   }}
   .notif-drop.open {{ display: flex; }}
   .notif-hdr {{
-    color: #4b7ab8; font-size: 10px; text-transform: uppercase;
+    color: #4b7ab8; font-size: 12px; text-transform: uppercase;
     letter-spacing: 1.8px; padding-bottom: 6px;
     border-bottom: 1px solid #1e293b; margin-bottom: 4px;
   }}
-  .notif-row {{ font-size: 13px; line-height: 1.7; }}
+  .notif-row {{ font-size: 15px; line-height: 1.7; }}
   .ni-ok    {{ color: #4ade80; }}
   .ni-warn  {{ color: #fbbf24; }}
   .ni-alert {{ color: #f87171; }}
