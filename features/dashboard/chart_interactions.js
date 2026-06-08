@@ -334,10 +334,53 @@ window._attachWheelListeners = function () {
   });
 };
 
+// ── Attach modebar +/- button listeners ──────────────────────────────────────
+// Plotly's zoom-in (+) and zoom-out (-) modebar buttons fire plotly_relayout
+// with a new xaxis.range.  We intercept that event, detect which button was
+// pressed by comparing the new span to the current dropdown's span, and
+// delegate to _stepZoom() so the behaviour is identical to the scroll wheel.
+//
+//   New span < current span → zoom-in  (+) pressed → _stepZoom(-1)
+//   New span > current span → zoom-out (-) pressed → _stepZoom(+1)
+//   New span ≈ current span (pan) → ignored
+//
+// The _zooming guard (set by _stepZoom / filterAndRender) prevents the
+// relayout event that filterAndRender itself fires from triggering a
+// second recursive call.
+window._attachRelayoutListeners = function () {
+  ['chart-counts', 'chart-pm', 'chart-env'].forEach(function (divId) {
+    document.getElementById(divId).on('plotly_relayout', function (ev) {
+      if (_zooming) return;  // ignore redraws triggered by our own filterAndRender
+
+      // Extract the new xaxis range from the event (Plotly uses two formats).
+      var x0 = ev['xaxis.range[0]'];
+      var x1 = ev['xaxis.range[1]'];
+      if (x0 === undefined && Array.isArray(ev['xaxis.range'])) {
+        x0 = ev['xaxis.range'][0];
+        x1 = ev['xaxis.range'][1];
+      }
+      if (x0 === undefined || x1 === undefined) return;  // not a range event
+
+      var newSpanMs     = _parseDate(x1).getTime() - _parseDate(x0).getTime();
+      var currentMins   = parseInt(document.getElementById('sel-range').value);
+      var currentSpanMs = currentMins * 60 * 1000;
+
+      if (newSpanMs < currentSpanMs - 1000) {
+        _stepZoom(-1);   // zoom-in (+) button
+      } else if (newSpanMs > currentSpanMs + 1000) {
+        _stepZoom(+1);   // zoom-out (-) button
+      }
+      // If spans are equal (pan), do nothing — chart stays at current window.
+    });
+  });
+};
+
 // ── Initial render ────────────────────────────────────────────────────────────
 filterAndRender();
 // Attach wheel listeners after charts exist in the DOM.
 window._attachWheelListeners();
+// Attach modebar +/- listeners after charts exist in the DOM.
+window._attachRelayoutListeners();
 
 // ── Close notification dropdown on outside click ──────────────────────────────
 document.addEventListener('click', function (e) {
