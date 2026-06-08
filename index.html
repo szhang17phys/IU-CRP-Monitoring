@@ -139,12 +139,28 @@
       <option value="1440" selected>Last 24 hr</option>
       <option value="2880">Last 2 days</option>
       <option value="4320">Last 3 days</option>
+      <option value="5760">Last 4 days</option>
+      <option value="7200">Last 5 days</option>
+      <option value="8640">Last 6 days</option>
       <option value="10080">Last 7 days</option>
+      <option value="11520">Last 8 days</option>
+      <option value="12960">Last 9 days</option>
+      <option value="14400">Last 10 days</option>
+      <option value="15840">Last 11 days</option>
+      <option value="17280">Last 12 days</option>
+      <option value="18720">Last 13 days</option>
+      <option value="20160">Last 14 days</option>
+      <option value="21600">Last 15 days</option>
+      <option value="23040">Last 16 days</option>
+      <option value="24480">Last 17 days</option>
+      <option value="25920">Last 18 days</option>
+      <option value="27360">Last 19 days</option>
+      <option value="28800">Last 20 days</option>
     </select>
   </div>
-  <div class="updated">Last pushed: 2026-06-08 11:13:48</div>
+  <div class="updated">Last pushed: 2026-06-08 11:20:55</div>
   <div style="flex:1"></div>
-  <div class="notif-wrap"><button class="notif-btn" onclick="document.getElementById('notif-drop').classList.toggle('open')">⊙ ALERTS <span style="color:#f87171">&#9679;</span></button><div class="notif-drop" id="notif-drop"><div class="notif-hdr">⊙ SYSTEM STATUS</div><div class="notif-row ni-alert">● Last sample: 2026-06-07 17:32:11 (17 hr 41 min ago)</div><div class="notif-row ni-warn">▲ ISO class: ISO 7 — marginal (target: ISO 6)</div><div class="notif-row ni-warn">▲ ≥0.5µm 57,559/m³ — exceeds ISO 6 (35 200)</div><div class="notif-row ni-alert">▲ ≥0.3µm 2,728,244/m³ — above contamination threshold</div><div class="notif-row ni-ok">● Laser: OK</div><div class="notif-row ni-ok">● Flow sensor: OK</div><div class="notif-row ni-ok">● RH 62% — nominal</div><div class="notif-row ni-ok">● Temp 18.9°C / 66°F — nominal</div><div class="notif-row ni-mute">○ No alerts emailed in last 24 hr</div></div></div>
+  <div class="notif-wrap"><button class="notif-btn" onclick="document.getElementById('notif-drop').classList.toggle('open')">⊙ ALERTS <span style="color:#f87171">&#9679;</span></button><div class="notif-drop" id="notif-drop"><div class="notif-hdr">⊙ SYSTEM STATUS</div><div class="notif-row ni-alert">● Last sample: 2026-06-07 17:32:11 (17 hr 48 min ago)</div><div class="notif-row ni-warn">▲ ISO class: ISO 7 — marginal (target: ISO 6)</div><div class="notif-row ni-warn">▲ ≥0.5µm 57,559/m³ — exceeds ISO 6 (35 200)</div><div class="notif-row ni-alert">▲ ≥0.3µm 2,728,244/m³ — above contamination threshold</div><div class="notif-row ni-ok">● Laser: OK</div><div class="notif-row ni-ok">● Flow sensor: OK</div><div class="notif-row ni-ok">● RH 62% — nominal</div><div class="notif-row ni-ok">● Temp 18.9°C / 66°F — nominal</div><div class="notif-row ni-mute">○ No alerts emailed in last 24 hr</div></div></div>
   <div class="iso-badge" style="color:#facc15;border-color:#facc15;margin-left:14px;">ISO&nbsp;7</div>
 </div>
 
@@ -359,15 +375,21 @@ function filterAndRender() {
 
   // X axis hard bounds for particle charts:
   //   maxallowed = latest data point — always set so zooming/panning cannot
-  //                drift into the future (prevents the chart reaching 2050+).
-  //   minallowed = first data point in the current slice — only set at the
-  //                maximum dropdown option (7 days) to stop left-expansion;
-  //                left unset below max so the zoom-out expansion listener fires.
+  //                drift into the future.
+  //   minallowed = 20 days hard floor — set when dropdown is at max option
+  //                to prevent panning/zooming past the 20-day ceiling.
   const isAtMax = sel.selectedIndex >= sel.options.length - 1;
+  const dataEndMs = TS.length > 0 ? _parseDate(TS[TS.length - 1]).getTime() : 0;
+  const hardFloorMs = dataEndMs - 20 * 24 * 60 * 60 * 1000;
   const xBounds = ts.length > 0 ? Object.assign(
-    { maxallowed: ts[ts.length - 1] },
-    isAtMax ? { minallowed: ts[0] } : {}
+    { maxallowed: TS[TS.length - 1] },
+    isAtMax ? { minallowed: _toLocalStr(new Date(hardFloorMs)) } : {}
   ) : {};
+
+  // Explicit range resets the viewport to the current window ONLY when not zooming (dropdown changes).
+  const fullRange = ts.length > 0 ? [TS[i], TS[TS.length - 1]] : null;
+  const countXRange = (!_zooming && fullRange) ? { range: fullRange, autorange: false } : {};
+  const pmXRange = (!_zooming && fullRange) ? { range: fullRange, autorange: false } : {};
 
   // ── Particle count chart (log scale) ─────────────────────────────────────
   // yaxis.fixedrange: true  →  +/- and scroll-zoom only move the X (time) axis.
@@ -381,19 +403,13 @@ function filterAndRender() {
         range:      COUNTS_Y_RANGE,
         fixedrange: true,
       }),
-      xaxis:       Object.assign({}, DARK.xaxis, { title: '' }, xBounds),
+      xaxis:       Object.assign({}, DARK.xaxis, { title: '' }, xBounds, countXRange),
       margin:      { l: 60, r: 72, t: 30, b: 50 },
       shapes:      [...gaps, ...isoShapes()],
       annotations: isoAnnotations(),
     }), PLOTLY_CFG);
 
   // ── PM mass chart (linear scale) ─────────────────────────────────────────
-  // Explicit xaxis.range resets the viewport to the current window on every
-  // filterAndRender call (dropdown change or zoom-out expansion), preventing
-  // a stale out-of-bounds range from persisting after the expansion step.
-  const pmXRange = ts.length > 0
-    ? { range: [ts[0], ts[ts.length - 1]], autorange: false }
-    : {};
   const p2 = Plotly.react('chart-pm', sliceTraces(PM, i),
     Object.assign({}, DARK, {
       yaxis: Object.assign({}, DARK.yaxis, {
@@ -433,13 +449,17 @@ function filterAndRender() {
   // fixedrange: true on both Y axes — +/- and scroll only move the X axis,
   // keeping the temp and RH scales stable for comparison across sessions.
   const livei = sliceIdxForArray(LIVE_TS, mins);
+  
   // Env chart uses LIVE_TS — same logic: maxallowed always set, minallowed only at max.
-  // Explicit range resets the viewport to the current window (same rationale as pmXRange).
+  const liveDataEndMs = LIVE_TS.length > 0 ? _parseDate(LIVE_TS[LIVE_TS.length - 1]).getTime() : 0;
+  const liveHardFloorMs = liveDataEndMs - 20 * 24 * 60 * 60 * 1000;
   const envXBounds = LIVE_TS.length > livei ? Object.assign(
-    { maxallowed: LIVE_TS[LIVE_TS.length - 1],
-      range: [LIVE_TS[livei], LIVE_TS[LIVE_TS.length - 1]], autorange: false },
-    isAtMax ? { minallowed: LIVE_TS[livei] } : {}
+    { maxallowed: LIVE_TS[LIVE_TS.length - 1] },
+    isAtMax ? { minallowed: _toLocalStr(new Date(liveHardFloorMs)) } : {}
   ) : {};
+
+  const envFullRange = LIVE_TS.length > livei ? [LIVE_TS[livei], LIVE_TS[LIVE_TS.length - 1]] : null;
+  const envXRange = (!_zooming && envFullRange) ? { range: envFullRange, autorange: false } : {};
 
   const p4 = Plotly.react('chart-env', [
     { x: LIVE_TS.slice(livei), y: TEMP_F.slice(livei), name: 'Temperature (°F)',
@@ -450,7 +470,7 @@ function filterAndRender() {
       line: { color: '#1d4ed8', width: 3 }, yaxis: 'y2' },
   ], Object.assign({}, DARK, {
     margin: { l: 60, r: 70, t: 30, b: 50 },
-    xaxis:  Object.assign({}, DARK.xaxis, { title: '' }, envXBounds),
+    xaxis:  Object.assign({}, DARK.xaxis, { title: '' }, envXBounds, envXRange),
     yaxis:  Object.assign({}, DARK.yaxis, {
       title:      'Temperature (°F)',
       autorange:  false,
@@ -543,7 +563,6 @@ function _enforceZoomConstraints(divId, targetX0, targetX1, x0orig, x1orig) {
   if (!tsArray.length) return;
 
   const dataEndMs = _parseDate(tsArray[tsArray.length - 1]).getTime();
-  const dataStartMs = _parseDate(tsArray[0]).getTime();
   let x0 = targetX0;
   let x1 = targetX1;
   let span = x1 - x0;
@@ -551,13 +570,9 @@ function _enforceZoomConstraints(divId, targetX0, targetX1, x0orig, x1orig) {
   // 1. Zoom-in clamp (floor)
   if (span < MIN_SPAN_MS) {
     console.log(`[Zoom] ${divId} zoom-in limit hit! Clamping to floor.`);
-    span = Math.min(MIN_SPAN_MS, dataEndMs - dataStartMs);
+    span = Math.min(MIN_SPAN_MS, dataEndMs - _parseDate(tsArray[0]).getTime());
     x1 = targetX1;
     x0 = x1 - span;
-    if (x0 < dataStartMs) {
-      x0 = dataStartMs;
-      x1 = x0 + span;
-    }
   }
 
   // 2. Right hard stop (never zoom past latest data)
@@ -570,14 +585,12 @@ function _enforceZoomConstraints(divId, targetX0, targetX1, x0orig, x1orig) {
   // 3. Zoom-out expansion / left hard stop
   //
   // hardFloorMs is an absolute lower bound: no matter which dropdown option is
-  // selected, the left edge can never go further back than 7 days from the
-  // latest data point.  This prevents aggressive scroll gestures from jumping
-  // past the 7-day ceiling in a single event (the old "return" path skipped the
-  // correction relayout, leaving the chart at an out-of-bounds viewport).
+  // selected, the left edge can never go further back than 20 days from the
+  // latest data point.
   const sel = document.getElementById('sel-range');
   const mins = parseInt(sel.value);
-  const minAllowedTime = Math.max(dataEndMs - mins * 60 * 1000, dataStartMs);
-  const hardFloorMs    = Math.max(dataEndMs - 7 * 24 * 60 * 60 * 1000, dataStartMs);
+  const minAllowedTime = dataEndMs - mins * 60 * 1000;
+  const hardFloorMs    = dataEndMs - 20 * 24 * 60 * 60 * 1000;
 
   if (x0 < minAllowedTime) {
     if (sel.selectedIndex < sel.options.length - 1) {
@@ -593,29 +606,43 @@ function _enforceZoomConstraints(divId, targetX0, targetX1, x0orig, x1orig) {
       });
       // No return: fall through so x0/x1 are clamped and the relayout fires.
     } else {
-      console.log(`[Zoom] ${divId} zoom-out limit hit! Snapping to 7-day floor.`);
+      console.log(`[Zoom] ${divId} zoom-out limit hit! Snapping to 20-day floor.`);
     }
-    // Enforce the hard 7-day floor regardless of which branch ran above.
+    // Enforce the hard 20-day floor regardless of which branch ran above.
     x0 = Math.max(x0, hardFloorMs);
     x1 = Math.min(x0 + span, dataEndMs);
   }
 
-  // If computed range differs from the original layout range, perform Plotly relayout.
-  if (Math.abs(x0 - x0orig) > 1000 || Math.abs(x1 - x1orig) > 1000) {
-    console.log(`[Zoom] ${divId} performing relayout: [${_toLocalStr(new Date(x0))} to ${_toLocalStr(new Date(x1))}]`);
-    _zooming = true;
-    Plotly.relayout(divId, {
-      'xaxis.range[0]': _toLocalStr(new Date(x0)),
-      'xaxis.range[1]': _toLocalStr(new Date(x1))
-    }).then(function () {
-      _zooming = false;
-      _updatePrevRange(divId, x0, x1);
-    }).catch(function () {
-      _zooming = false;
+  // Synchronize ranges across all three time-series charts
+  console.log(`[Zoom] ${divId} synchronizing relayout: [${_toLocalStr(new Date(x0))} to ${_toLocalStr(new Date(x1))}]`);
+  _zooming = true;
+  const charts = ['chart-counts', 'chart-pm', 'chart-env'];
+  const relayouts = charts.map(function (id) {
+    if (id === divId) {
+      if (Math.abs(x0 - x0orig) > 1000 || Math.abs(x1 - x1orig) > 1000) {
+        return Plotly.relayout(id, {
+          'xaxis.range[0]': _toLocalStr(new Date(x0)),
+          'xaxis.range[1]': _toLocalStr(new Date(x1))
+        });
+      } else {
+        return Promise.resolve();
+      }
+    } else {
+      return Plotly.relayout(id, {
+        'xaxis.range[0]': _toLocalStr(new Date(x0)),
+        'xaxis.range[1]': _toLocalStr(new Date(x1))
+      });
+    }
+  });
+
+  Promise.all(relayouts).then(function () {
+    _zooming = false;
+    charts.forEach(function (id) {
+      _updatePrevRange(id, x0, x1);
     });
-  } else {
-    _updatePrevRange(divId, x0, x1);
-  }
+  }).catch(function () {
+    _zooming = false;
+  });
 }
 
 // ── Attach listeners ──────────────────────────────────────────────────────────
