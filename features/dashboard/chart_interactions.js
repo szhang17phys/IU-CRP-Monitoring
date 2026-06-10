@@ -40,23 +40,82 @@ const RH_Y_RANGE = _rhVals.length
   ? [Math.max(0,   Math.min(..._rhVals) - 5), Math.min(100, Math.max(..._rhVals) + 5)]
   : [0, 100];
 
-// ── Layout base shared by all charts ─────────────────────────────────────────
-const DARK = {
-  paper_bgcolor: '#0f172a',
-  plot_bgcolor:  '#D1E8E2',
-  font:      { color: '#9ca3af', family: 'Courier New, monospace', size: 11 },
-  margin:    { l: 60, r: 20, t: 30, b: 50 },
-  hovermode: 'x unified',
-  hoverlabel: { bgcolor: '#1e293b', bordercolor: '#334155', font: { size: 11 } },
-  legend: { bgcolor: 'rgba(0,0,0,0)', bordercolor: '#334155', borderwidth: 1,
-            font: { size: 11 }, orientation: 'h', yanchor: 'bottom', y: 1.02, x: 0 },
-  xaxis: { gridcolor: '#b2d1c9', linecolor: '#334155', zerolinecolor: '#93beb4',
-           tickfont: { color: '#6b7280', size: 10 },
-           title_font: { color: '#6b7280', size: 11 } },
-  yaxis: { gridcolor: '#b2d1c9', linecolor: '#334155', zerolinecolor: '#93beb4',
-           tickfont: { color: '#6b7280', size: 10 },
-           title_font: { color: '#6b7280', size: 11 } },
-};
+// ── Theme-aware Plotly layout ─────────────────────────────────────────────────
+// All four chart divs — iterated when the theme toggles.
+const CHART_IDS = ['chart-counts', 'chart-pm', 'chart-dist', 'chart-env'];
+
+function _isLightTheme() {
+  return document.documentElement.getAttribute('data-theme') === 'light';
+}
+
+// Plotly layout patch matching the current CSS theme (values mirror the
+// :root / [data-theme="light"] variables in the generated <style> block).
+function getPlotlyTheme() {
+  const isLight = _isLightTheme();
+  return {
+    paper_bgcolor: isLight ? '#ffffff' : '#0d1117',
+    plot_bgcolor:  isLight ? '#ffffff' : '#0d1117',
+    font: {
+      color: isLight ? '#1f2328' : '#e6edf3',
+      family: 'Georgia, "Times New Roman", serif',
+      size: 12
+    },
+    xaxis: {
+      gridcolor:     isLight ? '#e8ecf0' : '#21262d',
+      linecolor:     isLight ? '#d0d7de' : '#30363d',
+      tickcolor:     isLight ? '#656d76' : '#8b949e',
+      zerolinecolor: isLight ? '#d0d7de' : '#30363d',
+    },
+    yaxis: {
+      gridcolor:     isLight ? '#e8ecf0' : '#21262d',
+      linecolor:     isLight ? '#d0d7de' : '#30363d',
+      tickcolor:     isLight ? '#656d76' : '#8b949e',
+      zerolinecolor: isLight ? '#d0d7de' : '#30363d',
+    },
+    legend: {
+      bgcolor:     isLight ? 'rgba(240,243,246,0.85)' : 'rgba(22,27,34,0.85)',
+      bordercolor: isLight ? '#d0d7de' : '#30363d',
+    },
+    hoverlabel: {
+      bgcolor:     isLight ? '#ffffff' : '#161b22',
+      bordercolor: isLight ? '#d0d7de' : '#30363d',
+      font: { color: isLight ? '#1f2328' : '#e6edf3' }
+    }
+  };
+}
+
+// Secondary-text and border colors per theme (axis ticks, bar value labels).
+function _themeMuted()  { return _isLightTheme() ? '#656d76' : '#8b949e'; }
+function _themeBorder() { return _isLightTheme() ? '#d0d7de' : '#30363d'; }
+
+// Full base layout shared by all charts: current theme colors + the static
+// sizing/behaviour options. Rebuilt on every render, so a theme toggle only
+// needs to call filterAndRender() to re-skin everything.
+function _baseLayout() {
+  const t = getPlotlyTheme();
+  return {
+    paper_bgcolor: t.paper_bgcolor,
+    plot_bgcolor:  t.plot_bgcolor,
+    font:          t.font,
+    margin:        { l: 60, r: 20, t: 30, b: 50 },
+    hovermode:     'x unified',
+    hoverlabel: Object.assign({}, t.hoverlabel, {
+      font: Object.assign({ size: 11 }, t.hoverlabel.font),
+    }),
+    legend: Object.assign({}, t.legend, {
+      borderwidth: 1, font: { size: 11 },
+      orientation: 'h', yanchor: 'bottom', y: 1.02, x: 0,
+    }),
+    xaxis: Object.assign({}, t.xaxis, {
+      tickfont:   { color: _themeMuted(), size: 10 },
+      title_font: { color: _themeMuted(), size: 11 },
+    }),
+    yaxis: Object.assign({}, t.yaxis, {
+      tickfont:   { color: _themeMuted(), size: 10 },
+      title_font: { color: _themeMuted(), size: 11 },
+    }),
+  };
+}
 
 // ── Plotly config shared across all charts ────────────────────────────────────
 // scrollZoom: false — native Plotly scroll zoom disabled; handled by
@@ -181,7 +240,7 @@ function isoAnnotations() {
     xref: 'paper', x: 1.02, yref: 'y', y: l.y,
     text: l.bold ? '<b>' + l.label + '</b>' : l.label,
     showarrow: false, xanchor: 'left',
-    font: { color: l.color, size: l.bold ? 12 : 10, family: 'Courier New, monospace' },
+    font: { color: l.color, size: l.bold ? 12 : 10, family: 'Georgia, "Times New Roman", serif' },
   }));
 }
 
@@ -218,6 +277,7 @@ function updateStats(i) {
 // that time window.  The explicit xaxis.range guarantees the viewport snaps to
 // the clean selected window on every call — no drift possible.
 function filterAndRender() {
+  const DARK = _baseLayout();   // current theme's layout — rebuilt every render
   const sel  = document.getElementById('sel-range');
   const mins = parseInt(sel.value);
   const i    = sliceIdx(mins);
@@ -275,6 +335,12 @@ function filterAndRender() {
     }), PLOTLY_CFG);
 
   // ── Size distribution bar chart ───────────────────────────────────────────
+  // Bar label + outline colors are baked into DIST by the generator; re-skin
+  // them to the current theme on every render.
+  if (DIST[0]) {
+    DIST[0].textfont = { color: _themeMuted(), size: 11 };
+    if (DIST[0].marker) DIST[0].marker.line = { color: _themeBorder(), width: 1 };
+  }
   const _distMax    = (DIST[0] && DIST[0].y.length) ? Math.max(...DIST[0].y) : 100;
   const _distLogMax = Math.log10(Math.max(_distMax, 1)) + 1.0;
   const p3 = Plotly.react('chart-dist', DIST,
@@ -311,17 +377,19 @@ function filterAndRender() {
   const tempBin = binByTime(LIVE_TS.slice(livei), TEMP_F.slice(livei),  ENV_BIN_MS);
   const rhBin   = binByTime(LIVE_TS.slice(livei), RH_VALS.slice(livei), ENV_BIN_MS);
 
+  // Wong palette: temperature = vermillion, humidity = blue — identical in
+  // both themes (colorblind-safe on dark and light backgrounds).
   const p4 = Plotly.react('chart-env', [
     { x: tempBin.x, y: tempBin.y, name: 'Temperature (°F)',
       type: 'scatter', mode: 'markers',
-      marker: { color: '#dc2626', size: 5 },
-      error_y: { type: 'constant', value: 0.36, color: 'rgba(220,38,38,0.7)',
+      marker: { color: '#D55E00', size: 5 },
+      error_y: { type: 'constant', value: 0.36, color: 'rgba(213,94,0,0.7)',
                  thickness: 1, width: 2 },
       yaxis: 'y' },
     { x: rhBin.x, y: rhBin.y, name: 'Humidity (%)',
       type: 'scatter', mode: 'markers',
-      marker: { color: '#1d4ed8', size: 5 },
-      error_y: { type: 'constant', value: 1, color: 'rgba(29,78,216,0.7)',
+      marker: { color: '#0072B2', size: 5 },
+      error_y: { type: 'constant', value: 1, color: 'rgba(0,114,178,0.7)',
                  thickness: 1, width: 2 },
       yaxis: 'y2' },
   ], Object.assign({}, DARK, {
@@ -333,16 +401,13 @@ function filterAndRender() {
       range:      TEMP_Y_RANGE,
       fixedrange: true,
     }),
-    yaxis2: {
+    yaxis2: Object.assign({}, DARK.yaxis, {
       title:      { text: 'Humidity (%)', standoff: 15 },
       overlaying: 'y', side: 'right',
       autorange:  false,
       range:      RH_Y_RANGE,
       fixedrange: true,
-      gridcolor:  '#b2d1c9', linecolor: '#334155',
-      tickfont:   { color: '#6b7280', size: 10 },
-      title_font: { color: '#6b7280', size: 11 },
-    },
+    }),
   }), PLOTLY_CFG);
 
   updateStats(i);
@@ -570,14 +635,14 @@ function _attachRefreshControl() {
   css.textContent =
     '@keyframes wlc-spin{to{transform:rotate(360deg)}}' +
     '.wlc-refresh-wrap{display:flex;align-items:center;align-self:flex-end;margin-bottom:0}' +
-    // White square so the control stands out against the dark header; sized to
+    // Theme-aware square (reads the CSS variables defined on :root); sized to
     // match the Time Range dropdown's height.
     '.wlc-refresh-btn{display:inline-flex;align-items:center;justify-content:center;' +
-      'width:24px;height:24px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:5px;' +
-      'color:#0f172a;cursor:pointer;padding:0;' +
+      'width:24px;height:24px;background:var(--bg-card);border:1px solid var(--border-color);border-radius:5px;' +
+      'color:var(--text-primary);cursor:pointer;padding:0;' +
       'transition:border-color .15s,color .15s,transform .15s,box-shadow .15s,background .15s}' +
-    '.wlc-refresh-btn:hover{background:#ffffff;border-color:#38bdf8;color:#0b1220;' +
-      'transform:rotate(-40deg);box-shadow:0 0 0 1px rgba(56,189,248,.35),0 0 12px rgba(56,189,248,.25)}' +
+    '.wlc-refresh-btn:hover{background:var(--bg-card-alt);border-color:var(--accent-yale-light);' +
+      'transform:rotate(-40deg);box-shadow:0 0 0 1px rgba(40,109,192,.35),0 0 12px rgba(40,109,192,.2)}' +
     '.wlc-refresh-btn:active{transform:scale(.92)}' +
     '.wlc-refresh-btn svg{width:14px;height:14px;display:block}' +
     '.wlc-refresh-btn.spinning svg{animation:wlc-spin .6s linear infinite}' +
@@ -650,6 +715,28 @@ function _attachBinControl() {
   document.getElementById('sel-bin').addEventListener('change', filterAndRender);
 }
 
+// ── Theme toggle ──────────────────────────────────────────────────────────────
+// The <html data-theme> attribute is set before render by the no-flash script
+// in <head> (localStorage 'wlc-theme', falling back to the OS preference).
+// The button label swaps via pure CSS (.tt-light / .tt-dark spans), so the
+// click handler only has to flip the attribute, persist it, and re-render.
+function _applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  try { localStorage.setItem('wlc-theme', theme); } catch (e) { /* ignore */ }
+  // filterAndRender() rebuilds every chart layout from _baseLayout(), which
+  // re-reads getPlotlyTheme() — this re-skins all CHART_IDS in one pass
+  // (including yaxis2 and bar-label colors, which a bare relayout patch misses).
+  filterAndRender();
+}
+
+function _attachThemeToggle() {
+  var btn = document.getElementById('theme-toggle');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    _applyTheme(_isLightTheme() ? 'dark' : 'light');
+  });
+}
+
 // ── Initial render ────────────────────────────────────────────────────────────
 _restoreTimeRange();   // keep the user's zoom level across reloads
 _attachBinControl();   // inject the Bin dropdown before the first render
@@ -660,6 +747,8 @@ window._attachWheelListeners();
 window._attachRelayoutListeners();
 // Attach the direct zoom-out (-) modebar button handler.
 window._attachZoomOutButtonListeners();
+// Wire up the dark/light theme toggle button in the header.
+_attachThemeToggle();
 // Inject the refresh control and start the 60 s auto-refresh.
 _attachRefreshControl();
 window.addEventListener('beforeunload', _saveTimeRange);

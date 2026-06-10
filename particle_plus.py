@@ -584,8 +584,10 @@ def generate_dashboard_html(csv_path, output_path):
         _plot_timestamps = timestamps
         _plot_records    = chart_records
 
-    ch_colors = ['#1e293b', '#1d4ed8', '#dc2626', '#15803d', '#7c3aed', '#c2410c']
-    pm_colors = ['#1e293b', '#1d4ed8', '#dc2626', '#15803d', '#7c3aed', '#c2410c']
+    # Wong colorblind-safe palette — identical in dark and light themes.
+    # (6 of the 7 Wong colors; yellow #F0E442 omitted: poor contrast on white.)
+    ch_colors = ['#0072B2', '#E69F00', '#009E73', '#D55E00', '#56B4E9', '#CC79A7']
+    pm_colors = ['#0072B2', '#E69F00', '#009E73', '#D55E00', '#56B4E9', '#CC79A7']
 
     ref = recent[0] if recent else {}
     ch_sizes = {}
@@ -686,7 +688,7 @@ def generate_dashboard_html(csv_path, output_path):
             [('Temperature', last_temp_f, '°F'),
              ('Humidity',    last_rh,     '%'),
              ('Flow Rate',   last_flow,   'CFM')],
-            ['#ff6b6b', '#4ecdc4', '#45b7d1'])
+            ['#D55E00', '#0072B2', '#56B4E9'])
     )
 
     # ── pre-serialise all JS data (avoids f-string brace escaping) ────────────
@@ -781,26 +783,22 @@ def generate_dashboard_html(csv_path, output_path):
                 _iso_class = _cls
                 break
 
+    # Badge color comes from the theme-aware status classes (CSS variables),
+    # so it stays readable in both dark and light modes.
     if _iso_class is None:
-        _iso_color = '#6b7280'
+        _iso_cls   = 'status-mute'
         _iso_label = 'ISO —'
-    elif _iso_class <= 4:
-        _iso_color = '#00e676'
-        _iso_label = f'ISO&nbsp;{_iso_class}'
     elif _iso_class <= 6:
-        _iso_color = '#4ade80'
+        _iso_cls   = 'status-ok'
         _iso_label = f'ISO&nbsp;{_iso_class}'
     elif _iso_class == 7:
-        _iso_color = '#facc15'
-        _iso_label = f'ISO&nbsp;{_iso_class}'
-    elif _iso_class == 8:
-        _iso_color = '#fb923c'
+        _iso_cls   = 'status-warn'
         _iso_label = f'ISO&nbsp;{_iso_class}'
     else:
-        _iso_color = '#f87171'
-        _iso_label = 'ISO&nbsp;9'
+        _iso_cls   = 'status-fault'
+        _iso_label = f'ISO&nbsp;{_iso_class}'
     iso_badge_html = (
-        f'<div class="iso-badge" style="color:{_iso_color};border-color:{_iso_color};margin-left:14px;">'
+        f'<div class="iso-badge {_iso_cls}" style="margin-left:14px;">'
         f'{_iso_label}</div>'
     )
 
@@ -952,8 +950,8 @@ def generate_dashboard_html(csv_path, output_path):
     _css_map = {'ok': 'ni-ok', 'warn': 'ni-warn', 'alert': 'ni-alert',
                 'email': 'ni-email', 'info': 'ni-info', 'mute': 'ni-mute'}
     _has_alert = any(s in ('alert', 'warn') for s, _ in _notif_rows)
-    _dot_html  = ' <span style="color:#f87171">&#9679;</span>' if _has_alert else \
-                 ' <span style="color:#4ade80">&#9679;</span>'
+    _dot_html  = ' <span class="status-fault">&#9679;</span>' if _has_alert else \
+                 ' <span class="status-ok">&#9679;</span>'
     notif_panel_html = (
         '<div class="notif-wrap">'
         f'<button class="notif-btn" onclick="document.getElementById(\'notif-drop\').classList.toggle(\'open\')">'
@@ -985,127 +983,240 @@ def generate_dashboard_html(csv_path, output_path):
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
+<script>
+/* no-flash theme bootstrap — must run synchronously before any render */
+(function() {{
+  var t = localStorage.getItem('wlc-theme');
+  if (!t) t = window.matchMedia('(prefers-color-scheme: light)').matches
+               ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+}})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
 <meta http-equiv="refresh" content="1800">
 <title>Wright Lab &#8212; DUNE High Bay Clean Room Monitoring</title>
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 <style>
+  /* ── theme variables — dark (default) ─────────────────────────────────── */
+  :root {{
+    --bg-primary:        #0d1117;
+    --bg-card:           #161b22;
+    --bg-card-alt:       #1c2128;
+    --bg-header:         #0d1117;
+    --border-color:      #30363d;
+    --text-primary:      #e6edf3;
+    --text-secondary:    #8b949e;
+    --text-accent:       #58a6ff;
+    --accent-yale:       #00356b;
+    --accent-yale-light: #286dc0;
+    --status-ok:         #3fb950;
+    --status-warn:       #d29922;
+    --status-fault:      #f85149;
+    --status-info:       #58a6ff;
+    --plot-bg:           #0d1117;
+    --plot-grid:         #21262d;
+    --card-shadow:       0 1px 3px rgba(0,0,0,0.4);
+  }}
+  /* ── theme variables — light ──────────────────────────────────────────── */
+  [data-theme="light"] {{
+    --bg-primary:        #f6f8fa;
+    --bg-card:           #ffffff;
+    --bg-card-alt:       #f0f3f6;
+    --bg-header:         #00356b;
+    --border-color:      #d0d7de;
+    --text-primary:      #1f2328;
+    --text-secondary:    #656d76;
+    --text-accent:       #0969da;
+    --accent-yale:       #00356b;
+    --accent-yale-light: #286dc0;
+    --status-ok:         #1a7f37;
+    --status-warn:       #9a6700;
+    --status-fault:      #cf222e;
+    --status-info:       #0969da;
+    --plot-bg:           #ffffff;
+    --plot-grid:         #e8ecf0;
+    --card-shadow:       0 1px 3px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
+  }}
   *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{
-    background: #030712;
-    color: #d1d5db;
-    font-family: 'Courier New', Courier, monospace;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
     padding: 20px 28px 40px;
     min-height: 100vh;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }}
-  .header {{ margin-bottom: 20px; border-bottom: 1px solid #1f2937; padding-bottom: 14px; }}
+  /* Chromium scrollbar matches the theme */
+  ::-webkit-scrollbar {{ width: 8px; }}
+  ::-webkit-scrollbar-track {{ background: var(--bg-primary); }}
+  ::-webkit-scrollbar-thumb {{ background: var(--border-color); border-radius: 4px; }}
+  ::-webkit-scrollbar-thumb:hover {{ background: var(--text-secondary); }}
+  /* ── header bar — Yale Blue in BOTH themes, white serif title ─────────── */
+  .header {{
+    background: var(--accent-yale);
+    margin: -20px -28px 20px;
+    padding: 16px 28px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 14px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--border-color);
+    transition: border-color 0.2s ease;
+  }}
   .header h1 {{
-    color: #38bdf8;
-    font-size: 18px;
-    letter-spacing: 3px;
-    font-weight: bold;
+    color: #ffffff;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 19px;
+    letter-spacing: 0.08em;
+    font-weight: normal;
     margin-bottom: 3px;
   }}
-  .header .sub {{ color: #6b7280; font-size: 11px; letter-spacing: 1px; }}
+  .header .sub {{
+    color: rgba(255,255,255,0.72); font-size: 11px; letter-spacing: 1px;
+  }}
+  .theme-toggle {{
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.45);
+    color: #ffffff;
+    border-radius: 20px;
+    padding: 4px 14px;
+    font-size: 0.82rem;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s;
+  }}
+  .theme-toggle:hover {{ background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.75); }}
+  /* label swap is pure CSS — no wrong-label flash on load */
+  .theme-toggle .tt-dark {{ display: none; }}
+  [data-theme="light"] .theme-toggle .tt-light {{ display: none; }}
+  [data-theme="light"] .theme-toggle .tt-dark {{ display: inline; }}
   .controls {{
     display: flex; gap: 16px; align-items: flex-end;
     flex-wrap: wrap; margin-bottom: 14px;
   }}
   .ctrl-group label {{
-    display: block; font-size: 10px; color: #6b7280;
+    display: block; font-size: 10px; color: var(--text-secondary);
     letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px;
   }}
   select {{
-    background: #111827; color: #d1d5db; border: 1px solid #374151;
+    background: var(--bg-card); color: var(--text-primary);
+    border: 1px solid var(--border-color);
     border-radius: 5px; padding: 6px 10px; font-size: 13px;
     font-family: inherit; cursor: pointer; min-width: 180px;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
   }}
-  select:focus {{ outline: none; border-color: #38bdf8; }}
-  .updated {{ font-size: 11px; color: #4b5563; align-self: flex-end; padding-bottom: 6px; }}
+  select:focus {{ outline: none; border-color: var(--accent-yale-light); }}
+  .updated {{ font-size: 11px; color: var(--text-secondary); align-self: flex-end; padding-bottom: 6px; }}
   .iso-badge {{
     display: inline-block; align-self: flex-end; margin-bottom: 6px;
     font-size: 14px; font-weight: bold; letter-spacing: 3px;
-    border: 1.5px solid; border-radius: 6px;
+    border: 1.5px solid currentColor; border-radius: 6px;
     padding: 4px 16px; font-family: inherit;
+  }}
+  /* ── status indicator classes (Part 6) ────────────────────────────────── */
+  .status-ok    {{ color: var(--status-ok); }}
+  .status-warn  {{ color: var(--status-warn); }}
+  .status-fault {{ color: var(--status-fault); }}
+  .status-info  {{ color: var(--status-info); }}
+  .status-mute  {{ color: var(--text-secondary); }}
+  /* ── shared card/panel chrome ─────────────────────────────────────────── */
+  .status-strip, .cards .card, .chart-panel, .stats-strip {{
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--card-shadow);
+    transition: background-color 0.2s ease, border-color 0.2s ease,
+                box-shadow 0.2s ease, color 0.2s ease;
   }}
   .status-strip {{
     display: flex; gap: 20px; flex-wrap: wrap;
-    background: #0f172a; border: 1px solid #1f2937;
     border-radius: 7px; padding: 10px 18px;
     margin-bottom: 14px; font-size: 12px;
   }}
-  .kv .k {{ color: #6b7280; }}
-  .kv .v {{ font-weight: bold; color: #d1d5db; }}
-  .kv .ok   {{ color: #4ade80; }}
-  .kv .fail {{ color: #f87171; }}
+  .kv .k {{ color: var(--text-secondary); }}
+  .kv .v {{ font-weight: bold; color: var(--text-primary); }}
+  .kv .ok   {{ color: var(--status-ok); }}
+  .kv .fail {{ color: var(--status-fault); }}
   .cards {{ display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }}
   .card {{
-    flex: 1; min-width: 120px; background: #0f172a;
-    border: 1px solid #1f2937; border-radius: 7px; padding: 12px 16px;
+    flex: 1; min-width: 120px;
+    border-radius: 7px; padding: 12px 16px;
   }}
   .card .card-label {{
-    font-size: 10px; color: #6b7280; text-transform: uppercase;
+    font-size: 10px; color: var(--text-secondary); text-transform: uppercase;
     letter-spacing: 1.2px; margin-bottom: 6px;
   }}
   .card .card-val {{ font-size: 26px; font-weight: bold; line-height: 1; }}
-  .card .card-unit {{ font-size: 12px; color: #6b7280; margin-left: 3px; }}
+  .card .card-unit {{ font-size: 12px; color: var(--text-secondary); margin-left: 3px; }}
   .chart-panel {{
-    background: #0f172a; border: 1px solid #1f2937;
     border-radius: 8px; padding: 14px 14px 6px; margin-bottom: 12px;
   }}
   .chart-title {{
-    font-size: 10px; color: #6b7280; text-transform: uppercase;
+    font-size: 10px; color: var(--text-secondary); text-transform: uppercase;
     letter-spacing: 1.5px; margin-bottom: 6px;
   }}
   .row2 {{ display: flex; gap: 12px; margin-bottom: 12px; }}
   .row2 .chart-panel {{ flex: 1; margin-bottom: 0; }}
   .stats-strip {{
     display: flex; gap: 0; flex-wrap: wrap;
-    background: #0a1628; border: 1px solid #1e3a5f;
+    background: var(--bg-card-alt);
     border-radius: 7px; padding: 9px 18px;
     margin-bottom: 14px; font-size: 11px;
   }}
   .stat-item {{ flex: 1; min-width: 160px; padding: 3px 12px 3px 0; }}
-  .stat-k {{ color: #4b7ab8; text-transform: uppercase; letter-spacing: 0.8px; display: block; font-size: 9px; }}
-  .stat-v {{ color: #93c5fd; font-weight: bold; font-size: 12px; }}
-  .stat-v.warn {{ color: #fbbf24; }}
-  .stat-v.alert {{ color: #f87171; }}
+  .stat-k {{ color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.8px; display: block; font-size: 9px; }}
+  .stat-v {{ color: var(--text-accent); font-weight: bold; font-size: 12px; }}
+  .stat-v.warn {{ color: var(--status-warn); }}
+  .stat-v.alert {{ color: var(--status-fault); }}
   .notif-wrap {{ position: relative; align-self: flex-end; margin-bottom: 6px; }}
   .notif-btn {{
-    background: #060d1a; border: 1px solid #1e3a5f; border-radius: 6px;
-    color: #4b7ab8; font-family: inherit; font-size: 11px; letter-spacing: 1.5px;
+    background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px;
+    color: var(--text-secondary); font-family: inherit; font-size: 11px; letter-spacing: 1.5px;
     text-transform: uppercase; padding: 5px 14px; cursor: pointer; white-space: nowrap;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
   }}
-  .notif-btn:hover {{ border-color: #38bdf8; color: #93c5fd; }}
+  .notif-btn:hover {{ border-color: var(--accent-yale-light); color: var(--text-accent); }}
   .notif-drop {{
     display: none; position: absolute; right: 0; top: calc(100% + 6px);
     min-width: 340px; max-width: 440px;
     max-height: 340px; overflow-y: auto;
-    background: #060d1a; border: 1px solid #1e3a5f; border-radius: 6px;
+    background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px;
+    box-shadow: var(--card-shadow);
     padding: 10px 16px 14px; z-index: 100;
     flex-direction: column; gap: 5px;
   }}
   .notif-drop.open {{ display: flex; }}
   .notif-hdr {{
-    color: #4b7ab8; font-size: 12px; text-transform: uppercase;
+    color: var(--text-secondary); font-size: 12px; text-transform: uppercase;
     letter-spacing: 1.8px; padding-bottom: 6px;
-    border-bottom: 1px solid #1e293b; margin-bottom: 4px;
+    border-bottom: 1px solid var(--border-color); margin-bottom: 4px;
   }}
   .notif-row {{ font-size: 15px; line-height: 1.7; }}
-  .ni-ok    {{ color: #4ade80; }}
-  .ni-warn  {{ color: #fbbf24; }}
-  .ni-alert {{ color: #f87171; }}
-  .ni-email {{ color: #93c5fd; }}
-  .ni-info  {{ color: #d1d5db; }}
-  .ni-mute  {{ color: #4b5563; }}
+  .ni-ok    {{ color: var(--status-ok); }}
+  .ni-warn  {{ color: var(--status-warn); }}
+  .ni-alert {{ color: var(--status-fault); }}
+  .ni-email {{ color: var(--status-info); }}
+  .ni-info  {{ color: var(--text-primary); }}
+  .ni-mute  {{ color: var(--text-secondary); }}
+  /* ── mobile ───────────────────────────────────────────────────────────── */
+  @media (max-width: 640px) {{
+    body {{ padding: 14px 14px 30px; }}
+    .header {{ margin: -14px -14px 16px; padding: 12px 14px; }}
+    .header h1 {{ font-size: 15px; }}
+    .row2 {{ flex-direction: column; }}
+  }}
 </style>
 </head>
 <body>
 
 <div class="header">
-  <h1>WRIGHT LAB &#8212; DUNE HIGH BAY CLEAN ROOM MONITORING</h1>
-  <div class="sub">Particle Plus Model 7301 &nbsp;&middot;&nbsp; Real-time Particulate &amp; Environmental Dashboard</div>
+  <div class="header-text">
+    <h1>WRIGHT LAB &#8212; DUNE HIGH BAY CLEAN ROOM MONITORING</h1>
+    <div class="sub">Particle Plus Model 7301 &nbsp;&middot;&nbsp; Real-time Particulate &amp; Environmental Dashboard</div>
+  </div>
+  <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">
+    <span class="tt-light">&#9728;&nbsp; Light</span><span class="tt-dark">&#9790;&nbsp; Dark</span>
+  </button>
 </div>
 
 {conn_banner}

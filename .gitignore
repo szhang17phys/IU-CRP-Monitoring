@@ -25,6 +25,7 @@ features/alerts/alerts_secrets.py
 
 # Local working files — not part of the published codebase
 slides_outline.md
+SESSION_HANDOFF.md
 
 # macOS
 .DS_Store
