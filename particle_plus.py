@@ -649,18 +649,19 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
 
     # ── status strip ──────────────────────────────────────────────────────────
     lv_temp_c = latest_val('temp_C')
-    last_temp_f = f'{c_to_f(lv_temp_c):.1f}' if lv_temp_c is not None else '—'
-    lv_rh   = latest_val('RH_pct')
-    last_rh = f'{lv_rh:.1f}'  if lv_rh  is not None else '—'
+    _tf_num = c_to_f(lv_temp_c) if lv_temp_c is not None else None
+    _rh_num = latest_val('RH_pct')
     # override env cards with latest live reading if available (live has real values)
     if live_temp_f:
         _ltf = next((v for v in reversed(live_temp_f) if v is not None), None)
         if _ltf is not None:
-            last_temp_f = f'{_ltf:.1f}'
+            _tf_num = _ltf
     if live_rh_vals:
         _lrh = next((v for v in reversed(live_rh_vals) if v is not None), None)
         if _lrh is not None:
-            last_rh = f'{_lrh:.1f}'
+            _rh_num = _lrh
+    last_temp_f = f'{_tf_num:.1f}' if _tf_num is not None else '—'
+    last_rh     = f'{_rh_num:.1f}' if _rh_num is not None else '—'
     lv_flow = latest_val('flow_CFM')
     last_flow = f'{lv_flow:.4f}' if lv_flow is not None else '—'
     last_ts   = timestamps[-1] if timestamps else '—'
@@ -691,16 +692,35 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
         flag_span('RH',    rh_ok)
     )
 
-    env_cards_html = ''.join(
-        f'<div class="card" style="border-top:3px solid {c}">'
-        f'<div class="card-label">{lab}</div>'
-        f'<span class="card-val" style="color:{c}">{val}</span>'
-        f'<span class="card-unit">{unit}</span></div>'
-        for (lab, val, unit), c in zip(
-            [('Temperature', last_temp_f, '°F'),
-             ('Humidity',    last_rh,     '%'),
-             ('Flow Rate',   last_flow,   'CFM')],
-            ['#D55E00', '#0072B2', '#56B4E9'])
+    # Card colors follow status (user rule: red = bad, orange = approaching bad,
+    # green = good). Temp is bad outside 32–110 °F, RH outside 30–70 %; within
+    # ENV_WARN_MARGIN of a limit counts as "approaching" → orange.
+    ENV_WARN_MARGIN = 5.0   # °F and % RH
+
+    def _band_cls(v, lo, hi):
+        if v is None:
+            return 'status-mute'
+        if v < lo or v > hi:
+            return 'status-fault'
+        if v < lo + ENV_WARN_MARGIN or v > hi - ENV_WARN_MARGIN:
+            return 'status-warn'
+        return 'status-ok'
+
+    _temp_card_cls = _band_cls(_tf_num, 32.0, 110.0)
+    _rh_card_cls   = _band_cls(_rh_num, 30.0, 70.0)
+
+    def _status_card(lab, val, unit, cls):
+        return (f'<div class="card {cls}" style="border-top:3px solid currentColor">'
+                f'<div class="card-label">{lab}</div>'
+                f'<span class="card-val">{val}</span>'
+                f'<span class="card-unit">{unit}</span></div>')
+
+    _flow_card_cls = ('status-mute' if flow_ok is None
+                      else 'status-ok' if flow_ok else 'status-fault')
+    env_cards_html = (
+        _status_card('Temperature', last_temp_f, '°F',  _temp_card_cls) +
+        _status_card('Humidity',    last_rh,     '%',   _rh_card_cls) +
+        _status_card('Flow Rate',   last_flow,   'CFM', _flow_card_cls)
     )
 
     # ── pre-serialise all JS data (avoids f-string brace escaping) ────────────
@@ -744,15 +764,16 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
     # These are added as reference lines on the particle count chart so the
     # measured concentrations can be compared directly to the standard.
     # Colors match the \u22650.5 \u00b5m channel trace (#2ecc71 = ch2) since all limits
-    # are defined at that size. ISO 6 is the exact channel color and boldest.
+    # are defined at that size. The line of the CURRENT ISO class is bolded
+    # later (after the class is computed), so the right-side labels show at a
+    # glance which level the room is in right now.
     _iso_ref_lines = [
         {'y': 3520,     'label': 'ISO\u00a05',  'color': '#81c784', 'width': 1.5, 'dash': 'dash', 'bold': False},
-        {'y': 35200,    'label': 'ISO\u00a06',  'color': '#2ecc71', 'width': 2.5, 'dash': 'dash', 'bold': True},
+        {'y': 35200,    'label': 'ISO\u00a06',  'color': '#2ecc71', 'width': 1.5, 'dash': 'dash', 'bold': False},
         {'y': 352000,   'label': 'ISO\u00a07',  'color': '#27ae60', 'width': 1.5, 'dash': 'dash', 'bold': False},
         {'y': 3520000,  'label': 'ISO\u00a08',  'color': '#1e8449', 'width': 1.5, 'dash': 'dash', 'bold': False},
         {'y': 35200000, 'label': 'ISO\u00a09',  'color': '#115f2e', 'width': 1.5, 'dash': 'dash', 'bold': False},
     ]
-    iso_lines_js = json.dumps(_iso_ref_lines)
 
     updated = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -816,29 +837,39 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
                 _iso_class = _cls
                 break
 
-    # Badge color comes from the theme-aware status classes (CSS variables).
-    # Tent target is ISO 8: green at or better than ISO 8, red when worse.
+    # Indicator color comes from the theme-aware status classes (CSS variables).
+    # Tent target is ISO 8: green when comfortably inside (ISO 7 or better),
+    # orange when AT the ISO 8 limit (approaching bad), red when worse (ISO 9+).
     if _iso_class is None:
         _iso_cls   = 'status-mute'
         _iso_label = 'ISO —'
-    elif _iso_class <= 8:
+    elif _iso_class <= 7:
         _iso_cls   = 'status-ok'
+        _iso_label = f'ISO&nbsp;{_iso_class}'
+    elif _iso_class == 8:
+        _iso_cls   = 'status-warn'
         _iso_label = f'ISO&nbsp;{_iso_class}'
     else:
         _iso_cls   = 'status-fault'
         _iso_label = f'ISO&nbsp;{_iso_class}'
-    iso_badge_html = (
-        f'<div class="iso-badge {_iso_cls}" style="margin-left:14px;">'
-        f'{_iso_label}</div>'
-    )
+
+    # Bold the chart reference line of the CURRENT ISO class so the right-side
+    # labels show at a glance which level the room is in right now.
+    for _l in _iso_ref_lines:
+        _l['bold']  = (_iso_class is not None
+                       and _l['label'] == f'ISO\u00a0{_iso_class}')
+        _l['width'] = 2.5 if _l['bold'] else 1.5
+    iso_lines_js = json.dumps(_iso_ref_lines)
 
     # ── notification center ────────────────────────────────────────────────────
-    # Thresholds mirror features/alerts/alerts.py defaults.
+    # Env thresholds match the status-card bands (red outside, orange within
+    # ENV_WARN_MARGIN of a limit). NOTE: features/alerts/alerts.py email
+    # thresholds are wider (RH 20-90, temp 33-120 °F) and unchanged.
     # Tent target is ISO 8. ISO 14644-1 defines no 0.3 µm limit for ISO 7-9,
     # so the 0.3 µm threshold uses the class formula 10^N x (0.1/D)^2.08:
     # ISO 8 equivalent at 0.3 µm ~= 10,200,000 /m³ (cumulative).
-    _N_RH_LOW   = 20.0;  _N_RH_HIGH   = 90.0
-    _N_TF_LOW   = 33.0;  _N_TF_HIGH   = 120.0
+    _N_RH_LOW   = 30.0;  _N_RH_HIGH   = 70.0
+    _N_TF_LOW   = 32.0;  _N_TF_HIGH   = 110.0
     _N_P_HIGH   = 10_200_000
 
     # Read alert state written by alerts.py (if it exists)
@@ -873,9 +904,12 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
     # 2. ISO classification — tent target is ISO 8: at or better than ISO 8 is
     #    nominal, ISO 9 (or unclassifiable) is the problem state.
     if _iso_class is not None:
-        if _iso_class <= 8:
+        if _iso_class <= 7:
             _notif_rows.append(('ok',
                 f'● ISO class: ISO {_iso_class} — within ISO 8 target'))
+        elif _iso_class == 8:
+            _notif_rows.append(('warn',
+                '▲ ISO class: ISO 8 — at the ISO 8 target limit'))
         else:
             _notif_rows.append(('alert',
                 f'▲ ISO class: ISO {_iso_class} — WORSE than ISO 8 target'))
@@ -903,14 +937,13 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
     # 4. >=0.3 um CUMULATIVE concentration. ISO 7-9 define no 0.3 µm limit,
     #    so compare against the ISO 8 EQUIVALENT from the class formula
     #    (~10,200,000 /m3 = _N_P_HIGH); warn above the ISO 7 equivalent.
+    # ISO 7-9 define no 0.3 µm limit, so a high 0.3 µm count cannot put the
+    # room "at ISO 8" — only flag it once it exceeds the ISO 8 equivalent.
     _p_now = sf(_latest_rec.get('ch1_sum_m3')) if _latest_rec else None
     if _p_now is not None:
         if _p_now > _N_P_HIGH:
             _notif_rows.append(('alert',
                 f'▲ ≥0.3µm {_p_now:,.0f}/m³ — exceeds ISO 8 equiv. (10 200 000)'))
-        elif _p_now > 1020000:
-            _notif_rows.append(('warn',
-                f'▲ ≥0.3µm {_p_now:,.0f}/m³ — above ISO 7 equiv. (1 020 000)'))
         else:
             _notif_rows.append(('ok',
                 f'● ≥0.3µm {_p_now:,.0f}/m³ — within ISO 8 equiv.'))
@@ -935,6 +968,10 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
         elif _rh_now > _N_RH_HIGH:
             _notif_rows.append(('alert',
                 f'▲ RH {_rh_now:.0f}% — above {_N_RH_HIGH:.0f}% (condensation risk)'))
+        elif (_rh_now < _N_RH_LOW + ENV_WARN_MARGIN
+              or _rh_now > _N_RH_HIGH - ENV_WARN_MARGIN):
+            _notif_rows.append(('warn',
+                f'▲ RH {_rh_now:.0f}% — nearing the {_N_RH_LOW:.0f}–{_N_RH_HIGH:.0f}% limits'))
         else:
             _notif_rows.append(('ok',
                 f'● RH {_rh_now:.0f}% — nominal'))
@@ -951,6 +988,10 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
         elif _tf_now > _N_TF_HIGH:
             _notif_rows.append(('alert',
                 f'▲ Temp {_tc_now:.1f}°C / {_tf_now:.0f}°F — above {_N_TF_HIGH:.0f}°F threshold'))
+        elif (_tf_now < _N_TF_LOW + ENV_WARN_MARGIN
+              or _tf_now > _N_TF_HIGH - ENV_WARN_MARGIN):
+            _notif_rows.append(('warn',
+                f'▲ Temp {_tc_now:.1f}°C / {_tf_now:.0f}°F — nearing the {_N_TF_LOW:.0f}–{_N_TF_HIGH:.0f}°F limits'))
         else:
             _notif_rows.append(('ok',
                 f'● Temp {_tc_now:.1f}°C / {_tf_now:.0f}°F — nominal'))
@@ -984,9 +1025,13 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
     # Build HTML rows
     _css_map = {'ok': 'ni-ok', 'warn': 'ni-warn', 'alert': 'ni-alert',
                 'email': 'ni-email', 'info': 'ni-info', 'mute': 'ni-mute'}
-    _has_alert = any(s in ('alert', 'warn') for s, _ in _notif_rows)
-    _dot_html  = ' <span class="status-fault">&#9679;</span>' if _has_alert else \
-                 ' <span class="status-ok">&#9679;</span>'
+    # Dot color follows the worst severity: red = alert, orange = warn, green = ok
+    if any(s == 'alert' for s, _ in _notif_rows):
+        _dot_html = ' <span class="status-fault">&#9679;</span>'
+    elif any(s == 'warn' for s, _ in _notif_rows):
+        _dot_html = ' <span class="status-warn">&#9679;</span>'
+    else:
+        _dot_html = ' <span class="status-ok">&#9679;</span>'
     notif_panel_html = (
         '<div class="notif-wrap">'
         f'<button class="notif-btn" onclick="document.getElementById(\'notif-drop\').classList.toggle(\'open\')">'
@@ -997,6 +1042,27 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
             f'<div class="notif-row {_css_map.get(s, "ni-mute")}">{msg}</div>'
             for s, msg in _notif_rows)
         + '</div></div>'
+    )
+
+    # ── counts/m³ row with the ISO class indicator on its right ──────────────
+    # Cumulative (≥ size) concentrations from the latest sample, plus the big
+    # ISO 14644-1 numeral. Count cards take the color of the room's overall
+    # ISO class (same tiering as the ISO card: ≤7 green, 8 orange, ≥9 red) so
+    # the whole row reads consistently — per user, a value is only "orange" if
+    # the room is actually at ISO 8, not by per-channel equivalents.
+    def _count_card(label, conc, cls):
+        val = f'{conc:,.0f}' if conc is not None else '&mdash;'
+        return (f'<div class="card {cls}" style="border-top:3px solid currentColor">'
+                f'<div class="card-label">{label}</div>'
+                f'<span class="card-val">{val}</span>'
+                f'<span class="card-unit">counts / m&sup3;</span></div>')
+
+    counts_cards_html = (
+        _count_card('&#8805;0.5 <span class="u">&micro;m</span>', _p05_now, _iso_cls) +
+        _count_card('&#8805;0.3 <span class="u">&micro;m</span>', _p_now,   _iso_cls) +
+        f'<div class="card iso-card {_iso_cls}">'
+        f'<div class="card-label">ISO 14644-1 Class &mdash; latest sample</div>'
+        f'<span class="iso-card-val">{_iso_label}</span></div>'
     )
 
     # ── connection banner ─────────────────────────────────────────────────────
@@ -1047,7 +1113,7 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
     --accent-yale:       #00356b;
     --accent-yale-light: #286dc0;
     --status-ok:         #3fb950;
-    --status-warn:       #d29922;
+    --status-warn:       #db6d28;
     --status-fault:      #f85149;
     --status-info:       #58a6ff;
     --plot-bg:           #0d1117;
@@ -1067,7 +1133,7 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
     --accent-yale:       #00356b;
     --accent-yale-light: #286dc0;
     --status-ok:         #1a7f37;
-    --status-warn:       #9a6700;
+    --status-warn:       #bc4c00;
     --status-fault:      #cf222e;
     --status-info:       #0969da;
     --plot-bg:           #ffffff;
@@ -1078,7 +1144,7 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
   body {{
     background: var(--bg-primary);
     color: var(--text-primary);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-family: "Times New Roman", Times, serif;
     padding: 20px 28px 40px;
     min-height: 100vh;
     transition: background-color 0.2s ease, color 0.2s ease;
@@ -1100,7 +1166,7 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
   }}
   .header h1 {{
     color: #ffffff;
-    font-family: Georgia, 'Times New Roman', serif;
+    font-family: 'Times New Roman', Times, serif;
     font-size: 21px;
     letter-spacing: 0.1em;
     font-weight: normal;
@@ -1109,7 +1175,7 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
   }}
   .header .sub {{
     color: rgba(255,255,255,0.78);
-    font-family: Georgia, 'Times New Roman', serif;
+    font-family: 'Times New Roman', Times, serif;
     font-style: italic;
     font-size: 12.5px;
     letter-spacing: 0.06em;
@@ -1122,7 +1188,7 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
   /* badge shown only on the noether-local full-history dashboard */
   .local-badge {{
     display: inline-block; vertical-align: middle; margin-left: 14px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-family: inherit;
     font-size: 10px; font-weight: bold; letter-spacing: 2.5px;
     color: #ffd75f; border: 1px solid rgba(255,215,95,0.65);
     border-radius: 4px; padding: 3px 9px 2px;
@@ -1161,18 +1227,15 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
   }}
   select:focus {{ outline: none; border-color: var(--accent-yale-light); }}
   .updated {{ font-size: 11px; color: var(--text-secondary); align-self: flex-end; padding-bottom: 6px; }}
-  .iso-badge {{
-    display: inline-block; align-self: flex-end; margin-bottom: 6px;
-    font-size: 14px; font-weight: bold; letter-spacing: 3px;
-    border: 1.5px solid currentColor; border-radius: 6px;
-    padding: 4px 16px; font-family: inherit;
-  }}
   /* ── status indicator classes (Part 6) ────────────────────────────────── */
   .status-ok    {{ color: var(--status-ok); }}
   .status-warn  {{ color: var(--status-warn); }}
   .status-fault {{ color: var(--status-fault); }}
   .status-info  {{ color: var(--status-info); }}
   .status-mute  {{ color: var(--text-secondary); }}
+  /* unit glyphs inside uppercased labels — CSS uppercase turns µ into Greek
+     capital Mu (renders as "M"), so units opt out of the transform */
+  .u {{ text-transform: none; }}
   /* ── shared card/panel chrome ─────────────────────────────────────────── */
   .status-strip, .cards .card, .chart-panel, .stats-strip {{
     background: var(--bg-card);
@@ -1201,6 +1264,19 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
   }}
   .card .card-val {{ font-size: 26px; font-weight: bold; line-height: 1; }}
   .card .card-unit {{ font-size: 12px; color: var(--text-secondary); margin-left: 3px; }}
+  /* big ISO class indicator at the right of the counts/m³ row — the soft
+     glow takes the current status color (green / orange / red) */
+  .cards .iso-card {{
+    text-align: right;
+    border-top: 3px solid currentColor;
+    box-shadow: var(--card-shadow),
+                inset 0 0 22px color-mix(in srgb, currentColor 10%, transparent);
+  }}
+  .cards .iso-card .card-label {{ color: var(--text-secondary); }}
+  .cards .iso-card .iso-card-val {{
+    font-size: 30px; font-weight: bold; letter-spacing: 2px; line-height: 1;
+    text-shadow: 0 0 14px color-mix(in srgb, currentColor 55%, transparent);
+  }}
   .chart-panel {{
     border-radius: 8px; padding: 14px 14px 6px; margin-bottom: 12px;
   }}
@@ -1282,27 +1358,27 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
   <div class="updated">{updated_label}: {updated}</div>
   <div style="flex:1"></div>
   {notif_panel_html}
-  {iso_badge_html}
 </div>
 
 <div class="status-strip">{status_strip_html}</div>
+<div class="cards">{counts_cards_html}</div>
 <div class="cards">{env_cards_html}</div>
 
 <div class="stats-strip">
   <div class="stat-item"><span class="stat-k">Samples in window</span><span class="stat-v" id="stat-n">--</span></div>
-  <div class="stat-item"><span class="stat-k">0.3 &micro;m &mdash; mean</span><span class="stat-v" id="stat-mean1">--</span></div>
-  <div class="stat-item"><span class="stat-k">0.3 &micro;m &mdash; peak</span><span class="stat-v" id="stat-peak1">--</span></div>
-  <div class="stat-item"><span class="stat-k">ISO 8 exceedances &nbsp;(0.5 &micro;m &gt; 3.52M /m&sup3;)</span><span class="stat-v" id="stat-exc7">--</span></div>
+  <div class="stat-item"><span class="stat-k">0.3 <span class="u">&micro;m</span> &mdash; mean</span><span class="stat-v" id="stat-mean1">--</span></div>
+  <div class="stat-item"><span class="stat-k">0.3 <span class="u">&micro;m</span> &mdash; peak</span><span class="stat-v" id="stat-peak1">--</span></div>
+  <div class="stat-item"><span class="stat-k">ISO 8 exceedances &nbsp;(0.5 <span class="u">&micro;m</span> &gt; 3.52M <span class="u">/m&sup3;</span>)</span><span class="stat-v" id="stat-exc7">--</span></div>
   <div class="stat-item"><span class="stat-k">Offline gaps detected</span><span class="stat-v" id="stat-gaps">--</span></div>
 </div>
 
 <div class="chart-panel">
-  <div class="chart-title">Particle Concentration Over Time &nbsp;&#8212; all 6 size channels (log scale, counts / m&#179;, ISO 14644-1 reference lines shown for 0.5 &micro;m)</div>
+  <div class="chart-title">Particle Concentration Over Time &nbsp;&#8212; all 6 size channels (log scale, <span class="u">counts / m&#179;</span>, ISO 14644-1 reference lines shown for 0.5 <span class="u">&micro;m</span>)</div>
   <div id="chart-counts" style="height:360px"></div>
 </div>
 
 <div class="chart-panel">
-  <div class="chart-title">PM Mass Concentration Over Time &nbsp;(&#956;g / m&#179;)</div>
+  <div class="chart-title">PM Mass Concentration Over Time &nbsp;(<span class="u">&#956;g / m&#179;</span>)</div>
   <div id="chart-pm" style="height:300px"></div>
 </div>
 
