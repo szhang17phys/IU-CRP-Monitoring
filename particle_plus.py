@@ -58,7 +58,7 @@ CYCLES              = 1       # 1 sample per cycle then hold
 # sync/erase
 ERASE_AFTER_SYNC    = False   # set True after verifying data
 MIN_RECORDS_TO_SYNC = 1
-TRIM_CAP            = 10_000  # auto-erase when counter exceeds this many records
+TRIM_CAP            = 20_000  # auto-erase when counter exceeds this many records
 
 # github — repo root = BASE_DIR so index.html lands at root (GitHub Pages)
 GITHUB_REPO_DIR     = BASE_DIR
@@ -1651,11 +1651,16 @@ def mode_sync(client=None):
             n_live = rebuild_live_csv(ARCHIVE_CSV, LIVE_CSV)
             log(f"live.csv rebuilt: {n_live} records (last 30 days)")
 
-        # ── erase counter if needed ───────────────────────────────────────────
-        if saved and (ERASE_AFTER_SYNC or total > TRIM_CAP):
-            if total > TRIM_CAP:
-                log(f"Counter at {total} records (>{TRIM_CAP}) — auto-erasing to free storage")
-            erase_counter(client)
+        # ── auto-erase counter above TRIM_CAP ─────────────────────────────────
+        # Erase only after features/auto_erase.py independently verifies that
+        # every counter record is present in the permanent archive.
+        if saved:
+            from features.auto_erase import verified_auto_erase
+            verified_auto_erase(client, total,
+                                archive_csv=ARCHIVE_CSV,
+                                state_path=COUNTER_STATE,
+                                cap=TRIM_CAP, erase_fn=erase_counter,
+                                log=log, force=ERASE_AFTER_SYNC)
 
         return True
 
