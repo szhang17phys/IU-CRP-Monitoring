@@ -377,18 +377,21 @@ function filterAndRender() {
     }), PLOTLY_CFG);
 
   // ── PM mass chart (linear scale) ─────────────────────────────────────────
-  const p2 = Plotly.react('chart-pm', pmData,
-    Object.assign({}, DARK, {
-      yaxis: Object.assign({}, DARK.yaxis, {
-        title:      'μg / m³',
-        rangemode:  'tozero',
-        range:      [0, PM_Y_MAX],
-        autorange:  false,
-        fixedrange: true,
-      }),
-      xaxis:  Object.assign({}, DARK.xaxis, { title: '' }, xBounds, xRange),
-      shapes: gaps,
-    }), PLOTLY_CFG);
+  // Local dashboard only — the public page omits the #chart-pm div entirely.
+  const p2 = document.getElementById('chart-pm')
+    ? Plotly.react('chart-pm', pmData,
+        Object.assign({}, DARK, {
+          yaxis: Object.assign({}, DARK.yaxis, {
+            title:      'μg / m³',
+            rangemode:  'tozero',
+            range:      [0, PM_Y_MAX],
+            autorange:  false,
+            fixedrange: true,
+          }),
+          xaxis:  Object.assign({}, DARK.xaxis, { title: '' }, xBounds, xRange),
+          shapes: gaps,
+        }), PLOTLY_CFG)
+    : Promise.resolve();
 
   // ── Size distribution bar chart ───────────────────────────────────────────
   // Bar colors, label and outline colors are baked into DIST by the generator;
@@ -572,7 +575,9 @@ function _stepZoom(direction) {
 // browser's default page-scroll behaviour while the cursor is over a chart.
 window._attachWheelListeners = function () {
   ['chart-counts', 'chart-pm', 'chart-env'].forEach(function (divId) {
-    document.getElementById(divId).addEventListener('wheel', function (ev) {
+    var el = document.getElementById(divId);
+    if (!el) return;   // chart-pm is absent on the public dashboard
+    el.addEventListener('wheel', function (ev) {
       ev.preventDefault();
       // deltaY > 0: scroll down = zoom out (+1); deltaY < 0: scroll up = zoom in (-1)
       _stepZoom(ev.deltaY > 0 ? +1 : -1);
@@ -595,7 +600,9 @@ window._attachWheelListeners = function () {
 // second recursive call.
 window._attachRelayoutListeners = function () {
   ['chart-counts', 'chart-pm', 'chart-env'].forEach(function (divId) {
-    document.getElementById(divId).on('plotly_relayout', function (ev) {
+    var el = document.getElementById(divId);
+    if (!el) return;   // chart-pm is absent on the public dashboard
+    el.on('plotly_relayout', function (ev) {
       if (_zooming) return;  // ignore redraws triggered by our own filterAndRender
 
       // Extract the new xaxis range from the event (Plotly uses two formats).
@@ -635,7 +642,9 @@ window._attachRelayoutListeners = function () {
 // cancel the native handler before it runs, so only our discrete step happens.
 window._attachZoomOutButtonListeners = function () {
   ['chart-counts', 'chart-pm', 'chart-env'].forEach(function (divId) {
-    document.getElementById(divId).addEventListener('click', function (ev) {
+    var el = document.getElementById(divId);
+    if (!el) return;   // chart-pm is absent on the public dashboard
+    el.addEventListener('click', function (ev) {
       if (ev.target.closest('[data-attr="zoom"][data-val="out"]')) {
         ev.stopPropagation();   // block Plotly's native zoom-out handler
         ev.preventDefault();

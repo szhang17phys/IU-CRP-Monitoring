@@ -678,31 +678,26 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
     lv_flow = latest_val('flow_CFM')
     last_flow = f'{lv_flow:.4f}' if lv_flow is not None else '—'
     last_ts   = timestamps[-1] if timestamps else '—'
-    n_samples = len(chart_records)
 
     laser_ok = latest_bool('laser_ok')
     flow_ok  = latest_bool('flow_ok')
-    temp_ok  = latest_bool('temp_ok')
-    rh_ok    = latest_bool('rh_ok')
 
-    def flag_span(label, ok):
-        cls = '' if ok is None else ('ok' if ok else 'fail')
-        txt = '—' if ok is None else ('OK' if ok else 'FAULT')
-        return (f'<div class="kv"><span class="k">{label}: </span>'
-                f'<span class="v {cls}">{txt}</span></div>')
+    # Laser/Flow health flags + last-sample time render as items of the single
+    # merged info strip (the old separate status strip was folded into the
+    # stats strip to save vertical space on the lab TV). Temp/RH flags were
+    # dropped — their live values are status-colored cards already, and the
+    # flow VALUE is a card too (only its OK/FAULT flag lives here).
+    def _flag_stat(label, ok):
+        cls = '' if ok is None else (' ok' if ok else ' alert')
+        txt = '&mdash;' if ok is None else ('OK' if ok else 'FAULT')
+        return (f'<div class="stat-item"><span class="stat-k">{label}</span>'
+                f'<span class="stat-v{cls}">{txt}</span></div>')
 
-    def kv_span(k, v):
-        return (f'<div class="kv"><span class="k">{k}: </span>'
-                f'<span class="v">{v}</span></div>')
-
-    status_strip_html = (
-        kv_span('Flow', f'{last_flow} CFM') +
-        kv_span('Samples', str(n_samples)) +
-        kv_span('Last sample', last_ts) +
-        flag_span('Laser', laser_ok) +
-        flag_span('Flow',  flow_ok)  +
-        flag_span('Temp',  temp_ok)  +
-        flag_span('RH',    rh_ok)
+    flag_stats_html = (
+        _flag_stat('Laser status', laser_ok) +
+        _flag_stat('Flow status',  flow_ok)  +
+        f'<div class="stat-item"><span class="stat-k">Last sample</span>'
+        f'<span class="stat-v">{last_ts}</span></div>'
     )
 
     # Card colors follow status (user rule: red = bad, orange = approaching bad,
@@ -810,6 +805,18 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
     updated_label    = 'Generated' if local else 'Last pushed'
     local_badge_html = '<span class="local-badge">LOCAL</span>' if local else ''
     is_local_js      = 'true' if local else 'false'
+    # Public dashboard fits the whole display in one viewport (TV mode);
+    # the local full-history dashboard keeps the scrolling layout.
+    body_cls         = '' if local else ' class="fit"'
+    # PM mass chart is local-only — removed from the public dashboard so
+    # everything fits on the lab monitor without scrolling.
+    pm_panel_html    = (
+        '<div class="chart-panel">\n'
+        '  <div class="chart-title">PM Mass Concentration Over Time '
+        '&nbsp;(<span class="u">&#956;g / m&#179;</span>)</div>\n'
+        '  <div id="chart-pm" style="height:300px"></div>\n'
+        '</div>'
+    ) if local else ''
 
     # ── ISO 14644-1:2015 classification ───────────────────────────────────────
     # Keyed by (class, size_um) → max cumulative particles/m³.
@@ -1074,7 +1081,7 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
         _count_card('&#8805;0.5 <span class="u">&micro;m</span>', _p05_now, _iso_cls) +
         _count_card('&#8805;0.3 <span class="u">&micro;m</span>', _p_now,   _iso_cls) +
         f'<div class="card iso-card {_iso_cls}">'
-        f'<div class="card-label">ISO 14644-1 Class &mdash; latest sample</div>'
+        f'<div class="card-label">ISO 14644-1 Class</div>'
         f'<span class="iso-card-val">{_iso_label}</span></div>'
     )
 
@@ -1170,8 +1177,8 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
   /* ── header bar — Yale Blue in BOTH themes, white serif title ─────────── */
   .header {{
     background: var(--accent-yale);
-    margin: -20px -28px 20px;
-    padding: 16px 28px;
+    margin: -20px -28px 16px;
+    padding: 10px 28px;
     display: flex; align-items: center; justify-content: space-between;
     gap: 14px; flex-wrap: wrap;
     border-bottom: 1px solid var(--border-color);
@@ -1180,17 +1187,17 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
   .header h1 {{
     color: #ffffff;
     font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
-    font-size: 21px;
+    font-size: 18px;
     letter-spacing: 0.1em;
     font-weight: normal;
-    margin-bottom: 6px;
+    margin-bottom: 3px;
     line-height: 1.25;
   }}
   .header .sub {{
     color: rgba(255,255,255,0.78);
     font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
     font-style: italic;
-    font-size: 12.5px;
+    font-size: 11.5px;
     letter-spacing: 0.06em;
   }}
   .header .sub .sub-sep {{
@@ -1227,6 +1234,12 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
     display: flex; gap: 16px; align-items: flex-end;
     flex-wrap: wrap; margin-bottom: 14px;
   }}
+  /* controls cluster lives inside the blue header — labels/text go light */
+  .header .controls {{ margin-bottom: 0; gap: 12px; justify-content: flex-end; }}
+  .header .ctrl-group label {{ color: rgba(255,255,255,0.75); }}
+  .header .controls select {{ min-width: 0; }}
+  .header .updated {{ color: rgba(255,255,255,0.85); }}
+  .header .theme-toggle {{ align-self: flex-end; margin-bottom: 2px; }}
   .ctrl-group label {{
     display: block; font-size: 10px; color: var(--text-secondary);
     letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px;
@@ -1250,44 +1263,35 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
      capital Mu (renders as "M"), so units opt out of the transform */
   .u {{ text-transform: none; }}
   /* ── shared card/panel chrome ─────────────────────────────────────────── */
-  .status-strip, .cards .card, .chart-panel, .stats-strip {{
+  .cards .card, .chart-panel, .stats-strip {{
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     box-shadow: var(--card-shadow);
     transition: background-color 0.2s ease, border-color 0.2s ease,
                 box-shadow 0.2s ease, color 0.2s ease;
   }}
-  .status-strip {{
-    display: flex; gap: 20px; flex-wrap: wrap;
-    border-radius: 7px; padding: 10px 18px;
-    margin-bottom: 14px; font-size: 12px;
-  }}
-  .kv .k {{ color: var(--text-secondary); }}
-  .kv .v {{ font-weight: bold; color: var(--text-primary); }}
-  .kv .ok   {{ color: var(--status-ok); }}
-  .kv .fail {{ color: var(--status-fault); }}
-  .cards {{ display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }}
+  .cards {{ display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }}
   .card {{
     flex: 1; min-width: 120px;
-    border-radius: 7px; padding: 12px 16px;
+    border-radius: 7px; padding: 10px 14px;
   }}
   .card .card-label {{
     font-size: 10px; color: var(--text-secondary); text-transform: uppercase;
     letter-spacing: 1.2px; margin-bottom: 6px;
   }}
-  .card .card-val {{ font-size: 26px; font-weight: bold; line-height: 1; }}
+  .card .card-val {{ font-size: 22px; font-weight: bold; line-height: 1; }}
   .card .card-unit {{ font-size: 12px; color: var(--text-secondary); margin-left: 3px; }}
   /* big ISO class indicator at the right of the counts/m³ row — the soft
      glow takes the current status color (green / orange / red) */
   .cards .iso-card {{
-    text-align: right;
+    text-align: center;
     border-top: 3px solid currentColor;
     box-shadow: var(--card-shadow),
                 inset 0 0 22px color-mix(in srgb, currentColor 10%, transparent);
   }}
   .cards .iso-card .card-label {{ color: var(--text-secondary); }}
   .cards .iso-card .iso-card-val {{
-    font-size: 30px; font-weight: bold; letter-spacing: 2px; line-height: 1;
+    font-size: 24px; font-weight: bold; letter-spacing: 2px; line-height: 1;
     text-shadow: 0 0 14px color-mix(in srgb, currentColor 55%, transparent);
   }}
   .chart-panel {{
@@ -1302,12 +1306,13 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
   .stats-strip {{
     display: flex; gap: 0; flex-wrap: wrap;
     background: var(--bg-card-alt);
-    border-radius: 7px; padding: 9px 18px;
-    margin-bottom: 14px; font-size: 11px;
+    border-radius: 7px; padding: 8px 18px;
+    margin-bottom: 12px; font-size: 11px;
   }}
-  .stat-item {{ flex: 1; min-width: 160px; padding: 3px 12px 3px 0; }}
+  .stat-item {{ flex: 1; min-width: 110px; padding: 3px 12px 3px 0; }}
   .stat-k {{ color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.8px; display: block; font-size: 9px; }}
   .stat-v {{ color: var(--text-accent); font-weight: bold; font-size: 12px; }}
+  .stat-v.ok {{ color: var(--status-ok); }}
   .stat-v.warn {{ color: var(--status-warn); }}
   .stat-v.alert {{ color: var(--status-fault); }}
   .notif-wrap {{ position: relative; align-self: flex-end; margin-bottom: 6px; }}
@@ -1340,6 +1345,29 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
   .ni-email {{ color: var(--status-info); }}
   .ni-info  {{ color: var(--text-primary); }}
   .ni-mute  {{ color: var(--text-secondary); }}
+  /* ── TV fit mode (public dashboard only, body.fit) ────────────────────────
+     The whole display fits one viewport — no scrolling on the lab monitor.
+     Fixed rows (header / cards / strip) keep their natural height; the chart
+     panels flex to fill whatever vertical space remains (main chart gets
+     ~1.7x the height of the bottom row). Mobile and the local full-history
+     dashboard keep the normal scrolling layout. */
+  @media (min-width: 1100px) and (min-height: 700px) {{
+    body.fit {{
+      height: 100vh; overflow: hidden;
+      display: flex; flex-direction: column;
+      padding-bottom: 16px;
+    }}
+    body.fit .header, body.fit .cards, body.fit .stats-strip {{ flex: 0 0 auto; }}
+    body.fit .chart-panel {{
+      display: flex; flex-direction: column; min-height: 0;
+    }}
+    body.fit .chart-panel > div[id^="chart-"] {{
+      flex: 1 1 0; min-height: 0; height: auto !important;
+    }}
+    body.fit .main-panel {{ flex: 1.7 1 0; margin-bottom: 12px; }}
+    body.fit .row2 {{ flex: 1 1 0; min-height: 0; margin-bottom: 0; }}
+    body.fit .row2 .chart-panel {{ flex: 1 1 0; }}
+  }}
   /* ── mobile ───────────────────────────────────────────────────────────── */
   @media (max-width: 640px) {{
     body {{ padding: 14px 14px 30px; }}
@@ -1349,35 +1377,32 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
   }}
 </style>
 </head>
-<body>
+<body{body_cls}>
 
 <div class="header">
   <div class="header-text">
     <h1>DUNE CRP ASSEMBLY SITE SLOW CONTROL{local_badge_html}</h1>
     <div class="sub">Particulate &amp; Environmental Monitor<span class="sub-sep">&middot;</span>Particles Plus 7301<span class="sub-sep">&middot;</span>CRP Assembly Tent</div>
   </div>
-  <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">
-    <span class="tt-light">&#9728;&nbsp; Light</span><span class="tt-dark">&#9790;&nbsp; Dark</span>
-  </button>
+  <div class="controls">
+    <div class="ctrl-group">
+      <label>Time Range</label>
+      <select id="sel-range" onchange="filterAndRender()">{range_options_html}</select>
+    </div>
+    <div class="updated">{updated_label}: {updated}</div>
+    {notif_panel_html}
+    <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">
+      <span class="tt-light">&#9728;&nbsp; Light</span><span class="tt-dark">&#9790;&nbsp; Dark</span>
+    </button>
+  </div>
 </div>
 
 {conn_banner}
 
-<div class="controls">
-  <div class="ctrl-group">
-    <label>Time Range</label>
-    <select id="sel-range" onchange="filterAndRender()">{range_options_html}</select>
-  </div>
-  <div class="updated">{updated_label}: {updated}</div>
-  <div style="flex:1"></div>
-  {notif_panel_html}
-</div>
-
-<div class="status-strip">{status_strip_html}</div>
-<div class="cards">{counts_cards_html}</div>
-<div class="cards">{env_cards_html}</div>
+<div class="cards">{counts_cards_html}{env_cards_html}</div>
 
 <div class="stats-strip">
+  {flag_stats_html}
   <div class="stat-item"><span class="stat-k">Samples in window</span><span class="stat-v" id="stat-n">--</span></div>
   <div class="stat-item"><span class="stat-k">0.3 <span class="u">&micro;m</span> &mdash; mean</span><span class="stat-v" id="stat-mean1">--</span></div>
   <div class="stat-item"><span class="stat-k">0.3 <span class="u">&micro;m</span> &mdash; peak</span><span class="stat-v" id="stat-peak1">--</span></div>
@@ -1385,15 +1410,12 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
   <div class="stat-item"><span class="stat-k">Offline gaps detected</span><span class="stat-v" id="stat-gaps">--</span></div>
 </div>
 
-<div class="chart-panel">
+<div class="chart-panel main-panel">
   <div class="chart-title">Particle Concentration Over Time &nbsp;&#8212; all 6 size channels (log scale, <span class="u">counts / m&#179;</span>, ISO 14644-1 reference lines shown for 0.5 <span class="u">&micro;m</span>)</div>
   <div id="chart-counts" style="height:360px"></div>
 </div>
 
-<div class="chart-panel">
-  <div class="chart-title">PM Mass Concentration Over Time &nbsp;(<span class="u">&#956;g / m&#179;</span>)</div>
-  <div id="chart-pm" style="height:300px"></div>
-</div>
+{pm_panel_html}
 
 <div class="row2">
   <div class="chart-panel">
