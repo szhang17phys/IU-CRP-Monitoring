@@ -44,7 +44,7 @@ BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
 BIND_ADDR = '127.0.0.1'          # loopback ONLY — see security note above
 LOCAL_HTML_NAME = 'index_local.html'
 LOCAL_HTML = os.path.join(BASE_DIR, LOCAL_HTML_NAME)
-REGEN_INTERVAL_S = 60            # matches the page's 60 s auto-reload
+REGEN_INTERVAL_S = 10            # matches the page's 60 s auto-reload
 
 sys.path.insert(0, BASE_DIR)
 import particle_plus as pp

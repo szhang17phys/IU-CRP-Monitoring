@@ -497,9 +497,12 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
         """Return formatted timestamp string if a real one exists, else None."""
         d = r.get('date', '').strip()
         t = r.get('time', '').strip()
-        # Only trust date/time from counter if timestamp_valid is True (or absent for old records)
-        ts_valid = r.get('timestamp_valid', None)
-        if d and t and ts_valid is not False:
+        # Trust date/time from counter if they're non-empty strings.
+        # The counter's timestamp_valid flag (bit 0x0080) can be incorrectly set
+        # even when valid timestamps ARE present — observed on 2026-06-17 when
+        # the RTC was running fine but all records had timestamp_valid=False.
+        # So we trust the actual date/time strings over the flag.
+        if d and t:
             return f"{d} {t}"
         for key in ('sync_time', 'snapshot_time'):
             ts_val = r.get(key, '').strip()
