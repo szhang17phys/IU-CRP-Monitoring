@@ -51,7 +51,8 @@ PID_FILE         = f'{BASE_DIR}/particle_plus.pid'
 
 # sampling schedule
 SAMPLE_TIME_S       = 60      # 1 minute sample
-HOLD_TIME_S         = 60     # 4 min between samples = ~15 per hour
+HOLD_TIME_S         = 0       # 0 = continuous sampling (no pause between samples)
+                              # Set to 60, 240, 300, etc. for slower sampling
 DELAY_TIME_S        = 5       # pump stabilization
 CYCLES              = 1       # 1 sample per cycle then hold
 
@@ -64,6 +65,8 @@ TRIM_CAP            = 20_000  # auto-erase when counter exceeds this many record
 GITHUB_REPO_DIR     = BASE_DIR
 GITHUB_BRANCH       = 'main'
 GITHUB_REMOTE       = 'origin'
+GITHUB_PUSH_INTERVAL_S = 300  # Push to GitHub every 5 minutes (decoupled from sampling)
+                              # Set to 0 to push after every sample (old behavior)
 
 # Counter admin password — must be written to register 1000 BEFORE any Protected
 # Write (PW) register can be written.  Registers 1016 (Date) and 1027 (Time) are
@@ -1549,18 +1552,26 @@ def mode_sample():
     """
     log("="*55)
     log("MODE: --sample  (24/7 scheduler)")
-    log(f"  Sampling every {HOLD_TIME_S}s ({HOLD_TIME_S//60} min)")
+    if HOLD_TIME_S == 0:
+        log(f"  Continuous sampling (HOLD_TIME_S=0, no pause between samples)")
+    elif HOLD_TIME_S < 60:
+        log(f"  Sampling every {HOLD_TIME_S}s")
+    else:
+        log(f"  Sampling every {HOLD_TIME_S}s ({HOLD_TIME_S//60} min)")
+    log(f"  GitHub push interval: {GITHUB_PUSH_INTERVAL_S}s ({GITHUB_PUSH_INTERVAL_S//60} min)" if GITHUB_PUSH_INTERVAL_S > 0 else "  GitHub push: after every sample")
     log("="*55)
 
     global _counter_online, _last_seen
     params_written = False
+    last_github_push = time.time()  # Track when we last pushed to GitHub
 
     while True:
         with _modbus_lock:
             client = connect()
             if client is None:
                 _counter_online = False
-                log(f"Connection failed — pushing last-known dashboard, retrying in {HOLD_TIME_S}s...")
+                retry_msg = "immediately" if HOLD_TIME_S == 0 else f"in {HOLD_TIME_S}s"
+                log(f"Connection failed — pushing last-known dashboard, retrying {retry_msg}...")
                 mode_dashboard()
             else:
                 try:
@@ -1581,15 +1592,30 @@ def mode_sample():
                     if completed:
                         mode_sync(client=client)
                         _last_seen = datetime.now()
-                        mode_dashboard()
+
+                        # Push to GitHub based on time interval (decoupled from sampling)
+                        current_time = time.time()
+                        time_since_last_push = current_time - last_github_push
+
+                        if GITHUB_PUSH_INTERVAL_S == 0 or time_since_last_push >= GITHUB_PUSH_INTERVAL_S:
+                            mode_dashboard()
+                            last_github_push = current_time
+                            log(f"GitHub push completed (next push in {GITHUB_PUSH_INTERVAL_S}s)")
+                        else:
+                            log(f"Skipping GitHub push (next push in {int(GITHUB_PUSH_INTERVAL_S - time_since_last_push)}s)")
 
                 except Exception as e:
                     log(f"Error in sample loop: {e}", 'ERROR')
                 finally:
                     client.close()
 
-        log(f"Sleeping {HOLD_TIME_S}s until next sample...")
-        time.sleep(HOLD_TIME_S)
+        if HOLD_TIME_S > 0:
+            log(f"Sleeping {HOLD_TIME_S}s until next sample...")
+            time.sleep(HOLD_TIME_S)
+        else:
+            log(f"Continuous mode: starting next sample immediately")
+            # Brief pause to prevent CPU spinning (allow other threads to run)
+            time.sleep(0.1)
 
 
 def mode_sync(client=None):
