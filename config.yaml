@@ -8,10 +8,12 @@ counter:
 
 paths:
   # Project data directory (for permanent archive storage)
-  # Set to './data' to use local repo directory (works everywhere)
-  # Or set to a custom path like '/project/dune/slow_control/particle_plus'
-  # Falls back to repo data/ dir if this path doesn't exist or can't be created
-  project_data_dir: './data'  # Default: local directory (always works)
+  # IMPORTANT: Archive should NEVER be in the git repo directory!
+  # Recommended locations:
+  #   - Cluster: /project/dune/slow_control/particle_plus
+  #   - Desktop: ~/particle_data
+  # Falls back to repo data/ dir if this path doesn't exist
+  project_data_dir: '~/particle_data'  # Default: home directory (safe, works everywhere)
 
 sampling:
   sample_time_s: 60      # Sample integration time (seconds)

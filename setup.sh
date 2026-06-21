@@ -152,34 +152,46 @@ else
     echo -e "${GREEN}✓ GitHub push disabled (monitoring only)${NC}"
 fi
 
-# Get project data directory
+# ── Determine archive directory (automatic, no prompts) ───────────────────
 echo ""
-echo "The system needs a directory to store the permanent data archive."
-echo "Options:"
-echo "  1. System directory (e.g., /project/dune/slow_control/particle_plus)"
-echo "  2. User home directory (e.g., ~/particle_data)"
-echo "  3. Local repo directory (./data - simplest, always works)"
-echo ""
-read -p "Choose option [1/2/3, default: 3]: " DIR_CHOICE
-DIR_CHOICE=${DIR_CHOICE:-3}
+echo "Determining archive directory..."
 
-case $DIR_CHOICE in
-    1)
-        read -p "Enter system directory path: " PROJECT_DIR
-        ;;
-    2)
-        PROJECT_DIR="$HOME/particle_data"
-        echo "Using: $PROJECT_DIR"
-        ;;
-    3)
-        PROJECT_DIR="./data"
-        echo "Using: $PROJECT_DIR (local repo directory)"
-        ;;
-    *)
-        PROJECT_DIR="./data"
-        echo "Invalid choice, using: $PROJECT_DIR"
-        ;;
-esac
+# Try to create /project/dune/slow_control/particle_plus
+# This is the standard location for Yale/similar institutions
+SYSTEM_DIR="/project/dune/slow_control/particle_plus"
+
+if [ -d "/project" ]; then
+    # /project exists (likely a cluster with shared filesystem)
+    echo "Detected /project filesystem (cluster environment)"
+    echo "Attempting to create: $SYSTEM_DIR"
+
+    if mkdir -p "$SYSTEM_DIR" 2>/dev/null; then
+        PROJECT_DIR="$SYSTEM_DIR"
+        echo -e "${GREEN}✓ Created $PROJECT_DIR${NC}"
+    else
+        # Need sudo
+        echo -e "${YELLOW}⚠ Permission denied, trying with sudo...${NC}"
+        if sudo mkdir -p "$SYSTEM_DIR" 2>/dev/null && sudo chown $USER "$SYSTEM_DIR" 2>/dev/null; then
+            PROJECT_DIR="$SYSTEM_DIR"
+            echo -e "${GREEN}✓ Created $PROJECT_DIR (with sudo)${NC}"
+        else
+            # Sudo failed, use home directory
+            PROJECT_DIR="$HOME/particle_data"
+            echo -e "${YELLOW}⚠ Could not create system directory${NC}"
+            echo "Using home directory: $PROJECT_DIR"
+            mkdir -p "$PROJECT_DIR"
+        fi
+    fi
+else
+    # No /project filesystem (desktop/laptop/different cluster)
+    echo "No /project filesystem detected (desktop/laptop environment)"
+    PROJECT_DIR="$HOME/particle_data"
+    echo "Using home directory: $PROJECT_DIR"
+    mkdir -p "$PROJECT_DIR"
+fi
+
+echo -e "${GREEN}✓ Archive directory: $PROJECT_DIR${NC}"
+echo "  (This is where ALL data will be stored permanently)"
 
 # Create config.local.yaml
 cat > config.local.yaml << EOF
@@ -207,62 +219,17 @@ echo ""
 
 echo -e "${BLUE}[6/7] Creating data directories...${NC}"
 
-# Always create local data directory (fallback)
+# Create local data directory (for 30-day live.csv - pushed to GitHub if enabled)
 mkdir -p data
-echo -e "${GREEN}✓ Created data/ directory (fallback)${NC}"
+echo -e "${GREEN}✓ Created data/ directory (for 30-day rolling window)${NC}"
 
-# Handle project data directory creation with smart fallback
-if [ "$PROJECT_DIR" = "./data" ]; then
-    # User chose local directory - already created
-    echo -e "${GREEN}✓ Using local data/ directory (already created)${NC}"
-    ACTUAL_ARCHIVE_DIR="$PROJECT_DIR"
-elif mkdir -p "$PROJECT_DIR" 2>/dev/null; then
-    # Successfully created
-    echo -e "${GREEN}✓ Created $PROJECT_DIR${NC}"
-    ACTUAL_ARCHIVE_DIR="$PROJECT_DIR"
+# Archive directory was already created in Step 5
+if [ -d "$PROJECT_DIR" ] && [ -w "$PROJECT_DIR" ]; then
+    echo -e "${GREEN}✓ Archive directory ready: $PROJECT_DIR${NC}"
 else
-    # Failed to create - offer sudo option
-    echo -e "${YELLOW}⚠ Could not create $PROJECT_DIR (permission denied)${NC}"
-    echo ""
-    echo "Options:"
-    echo "  1. Try with sudo (requires admin password)"
-    echo "  2. Use ~/particle_data instead (your home directory)"
-    echo "  3. Use ./data instead (local repo directory)"
-    echo ""
-    read -p "Choose option [1/2/3, default: 3]: " FALLBACK_CHOICE
-    FALLBACK_CHOICE=${FALLBACK_CHOICE:-3}
-
-    case $FALLBACK_CHOICE in
-        1)
-            echo "Attempting to create directory with sudo..."
-            if sudo mkdir -p "$PROJECT_DIR" 2>/dev/null; then
-                sudo chown $USER:$(id -gn) "$PROJECT_DIR"
-                echo -e "${GREEN}✓ Created $PROJECT_DIR with sudo${NC}"
-                ACTUAL_ARCHIVE_DIR="$PROJECT_DIR"
-            else
-                echo -e "${RED}✗ sudo creation failed${NC}"
-                echo "Falling back to local data/ directory"
-                ACTUAL_ARCHIVE_DIR="./data"
-                PROJECT_DIR="./data"
-            fi
-            ;;
-        2)
-            PROJECT_DIR="$HOME/particle_data"
-            mkdir -p "$PROJECT_DIR"
-            echo -e "${GREEN}✓ Using $PROJECT_DIR${NC}"
-            ACTUAL_ARCHIVE_DIR="$PROJECT_DIR"
-            ;;
-        3)
-            PROJECT_DIR="./data"
-            echo -e "${GREEN}✓ Using local data/ directory${NC}"
-            ACTUAL_ARCHIVE_DIR="./data"
-            ;;
-        *)
-            PROJECT_DIR="./data"
-            echo -e "${GREEN}✓ Using local data/ directory${NC}"
-            ACTUAL_ARCHIVE_DIR="./data"
-            ;;
-    esac
+    echo -e "${RED}✗ Archive directory not accessible: $PROJECT_DIR${NC}"
+    echo "Please check permissions and try again."
+    exit 1
 fi
 
 echo ""

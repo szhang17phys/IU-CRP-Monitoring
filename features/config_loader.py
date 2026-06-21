@@ -52,7 +52,7 @@ def get_default_config():
             'password': '',
         },
         'paths': {
-            'project_data_dir': './data',  # Safe default: use local repo directory
+            'project_data_dir': '~/particle_data',  # Safe default: home directory
         },
         'sampling': {
             'sample_time_s': 60,
