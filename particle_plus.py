@@ -245,16 +245,36 @@ def sync_counter_clock(client):
         client.write_registers(address=1027, values=encode_string(time_str, 9))
         time.sleep(0.3)
 
-        # ── 5. Read back and compare ───────────────────────────────────────────
+        # ── 5. Read back and compare (with tolerance for timing) ───────────────
         rd = client.read_holding_registers(address=1016, count=11)
         rt = client.read_holding_registers(address=1027, count=9)
         rb_date = decode_string(rd.registers) if not rd.isError() else '?'
         rb_time = decode_string(rt.registers) if not rt.isError() else '?'
         log(f"sync_counter_clock: clock AFTER write = '{rb_date}' '{rb_time}'")
 
-        if rb_date == date_str and rb_time == time_str:
-            log(f"Counter clock synced OK: {date_str} {time_str}")
-        else:
+        # Check if sync succeeded (allow ±10 second tolerance for delays)
+        sync_ok = False
+        if rb_date == date_str:
+            # Date matches, check if time is within ±10 seconds
+            try:
+                from datetime import datetime, timedelta
+                sent_dt = datetime.strptime(f"{date_str} {time_str}", '%Y-%m-%d %H:%M:%S')
+                read_dt = datetime.strptime(f"{rb_date} {rb_time}", '%Y-%m-%d %H:%M:%S')
+                diff = abs((read_dt - sent_dt).total_seconds())
+
+                if diff <= 10:
+                    sync_ok = True
+                    log(f"Counter clock synced OK: {rb_date} {rb_time} "
+                        f"(within {diff:.0f}s of target)")
+                else:
+                    log(f"Counter clock sync FAILED — time diff {diff:.0f}s exceeds 10s tolerance", 'WARN')
+            except ValueError:
+                # If we can't parse timestamps, fall back to exact match
+                if rb_time == time_str:
+                    sync_ok = True
+                    log(f"Counter clock synced OK: {date_str} {time_str}")
+
+        if not sync_ok:
             log(f"Counter clock sync FAILED — "
                 f"sent '{date_str}' '{time_str}' | "
                 f"readback '{rb_date}' '{rb_time}' | "
