@@ -17,8 +17,10 @@ COUNTER_PORT = 502
 def get_record_count(client):
     """Read how many records are in counter memory."""
     result = client.read_input_registers(address=8000, count=1)
-    if hasattr(result, 'registers'):
+    if hasattr(result, 'registers') and len(result.registers) > 0:
         return result.registers[0]
+    elif hasattr(result, 'isError') and result.isError():
+        raise Exception(f"Modbus error reading record count: {result}")
     return 0
 
 def erase_counter(client):
