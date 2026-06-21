@@ -30,6 +30,14 @@ config.local.yaml
 slides_outline.md
 SESSION_HANDOFF.md
 
+# Development/implementation documentation — keep local only, don't publish
+IMPLEMENTATION_SUMMARY.md
+FINAL_VERIFICATION.md
+COMPLETE_IMPLEMENTATION_SUMMARY.md
+FINAL_COMPLETE_SUMMARY.md
+TEST_SETUP.md
+CLEANUP_GITHUB.sh
+
 # Noether-only full-history dashboard output (local_serve.py) — NEVER push:
 # it contains the complete archive, not the public 30-day window
 index_local.html
