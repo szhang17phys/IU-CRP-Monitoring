@@ -682,7 +682,10 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
 
     ch_pm     = {i: [sf(r.get(f'ch{i}_pm_ugm3')) if r is not None else None
                      for r in _plot_records] for i in range(1, 7)}
-    ch_pm     = {i: [v if v and v > 0 else None for v in vals]
+    # For log scale: replace zero/negative with small floor value (0.001 µg/m³)
+    # instead of None, so all 6 channels always appear in legend even if near-zero
+    PM_FLOOR = 0.001
+    ch_pm     = {i: [max(v, PM_FLOOR) if v is not None and v >= 0 else None for v in vals]
                  for i, vals in ch_pm.items()}
     flow_vals = [sf(r.get('flow_CFM')) if r is not None else None for r in _plot_records]
 

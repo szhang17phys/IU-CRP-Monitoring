@@ -29,6 +29,7 @@ config.local.yaml
 # Local working files — not part of the published codebase
 slides_outline.md
 SESSION_HANDOFF.md
+NextSteps.md
 
 # Development/implementation documentation — keep local only, don't publish
 IMPLEMENTATION_SUMMARY.md
