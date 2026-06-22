@@ -682,10 +682,7 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
 
     ch_pm     = {i: [sf(r.get(f'ch{i}_pm_ugm3')) if r is not None else None
                      for r in _plot_records] for i in range(1, 7)}
-    # For log scale: replace zero/negative with small floor value (0.001 µg/m³)
-    # instead of None, so all 6 channels always appear in legend even if near-zero
-    PM_FLOOR = 0.001
-    ch_pm     = {i: [max(v, PM_FLOOR) if v is not None and v >= 0 else None for v in vals]
+    ch_pm     = {i: [v if v and v > 0 else None for v in vals]
                  for i, vals in ch_pm.items()}
     flow_vals = [sf(r.get('flow_CFM')) if r is not None else None for r in _plot_records]
 
@@ -889,6 +886,14 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
         '<div class="chart-panel">\n'
         '  <div class="chart-title">PM Mass Concentration Over Time '
         '&nbsp;(<span class="u">&#956;g / m&#179;</span>)</div>\n'
+        '  <div style="font-size:11px; color:var(--text-secondary); padding:4px 12px; display:flex; gap:16px; flex-wrap:wrap;">\n'
+        f'    <span style="color:#0072B2;">■</span> PM≥{ch_sizes.get(1, "0.3")}µm &nbsp;\n'
+        f'    <span style="color:#E69F00;">■</span> PM≥{ch_sizes.get(2, "0.5")}µm &nbsp;\n'
+        f'    <span style="color:#009E73;">■</span> PM≥{ch_sizes.get(3, "1.0")}µm &nbsp;\n'
+        f'    <span style="color:#D55E00;">■</span> PM≥{ch_sizes.get(4, "2.5")}µm &nbsp;\n'
+        f'    <span style="color:#56B4E9;">■</span> PM≥{ch_sizes.get(5, "5.0")}µm &nbsp;\n'
+        f'    <span style="color:#CC79A7;">■</span> PM≥{ch_sizes.get(6, "10.0")}µm\n'
+        '  </div>\n'
         '  <div id="chart-pm" style="height:300px"></div>\n'
         '</div>'
     ) if local else ''
