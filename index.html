@@ -241,8 +241,8 @@
     border-radius: 7px; padding: 8px 18px;
     margin-bottom: 12px; font-size: 11px;
   }
-  .stat-item { flex: 1; min-width: 110px; padding: 3px 12px 3px 0; }
-  .stat-k { color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.8px; display: block; font-size:14px; }
+  .stat-item { flex: 1.6; min-width: 110px; padding: 3px 12px 3px 0; }
+  .stat-k { color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.9px; display: block; font-size:14px; white-space: nowrap;}
   .stat-v { color: var(--text-accent); font-weight: bold; font-size: 22px; }
   .stat-v.ok { color: var(--status-ok); }
   .stat-v.warn { color: var(--status-warn); }
@@ -355,7 +355,12 @@
   <div class="stat-item"><span class="stat-k">Samples in window</span><span class="stat-v" id="stat-n">--</span></div>
   <div class="stat-item"><span class="stat-k">0.3 <span class="u">&micro;m</span> &mdash; mean</span><span class="stat-v" id="stat-mean1">--</span></div>
   <div class="stat-item"><span class="stat-k">0.3 <span class="u">&micro;m</span> &mdash; peak</span><span class="stat-v" id="stat-peak1">--</span></div>
+
   <div class="stat-item"><span class="stat-k">ISO 8 exceedances &nbsp;(0.5 <span class="u">&micro;m</span> &gt; 3.52M <span class="u">/m&sup3;</span>)</span><span class="stat-v" id="stat-exc7">--</span></div>
+
+  <div class="stat-item stat-wide"><span class="stat-k">ISO 8 exceedances &nbsp;(0.5 <span class="u">&micro;m</span> &gt; 3.52M <span class="u">/m&sup3;</span>)</span><span class="stat-v" id="stat-exc7">--</span></div>
+
+
   <div class="stat-item"><span class="stat-k">Offline gaps detected</span><span class="stat-v" id="stat-gaps">--</span></div>
 </div>
 
