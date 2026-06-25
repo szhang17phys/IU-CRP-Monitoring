@@ -241,7 +241,9 @@
     border-radius: 7px; padding: 8px 18px;
     margin-bottom: 12px; font-size: 11px;
   }
-  .stat-item { flex: 1.6; min-width: 110px; padding: 3px 12px 3px 0; }
+  .stat-item { flex: 1.0; min-width: 110px; padding: 6px 12px 6px 0; }
+  .stat-narrow {flex: 0.7; min-width: 80px;}
+  .stat-wide {flex: 1.8; min-width: 80px;}
   .stat-k { color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.9px; display: block; font-size:14px; white-space: nowrap;}
   .stat-v { color: var(--text-accent); font-weight: bold; font-size: 22px; }
   .stat-v.ok { color: var(--status-ok); }
@@ -351,12 +353,18 @@
 <div class="cards"><div class="card status-warn" style="border-top:3px solid currentColor"><div class="card-label">&#8805;0.5 <span class="u">&micro;m</span></div><span class="card-val">1,066,277</span><span class="card-unit">counts / m&sup3;</span></div><div class="card status-warn" style="border-top:3px solid currentColor"><div class="card-label">&#8805;0.3 <span class="u">&micro;m</span></div><span class="card-val">23,356,428</span><span class="card-unit">counts / m&sup3;</span></div><div class="card iso-card status-warn"><div class="card-label">ISO 14644-1 Class</div><span class="iso-card-val">ISO&nbsp;8</span></div><div class="card status-ok" style="border-top:3px solid currentColor"><div class="card-label">Temperature</div><span class="card-val">71.8</span><span class="card-unit">°F</span></div><div class="card status-ok" style="border-top:3px solid currentColor"><div class="card-label">Humidity</div><span class="card-val">44.0</span><span class="card-unit">%</span></div><div class="card status-ok" style="border-top:3px solid currentColor"><div class="card-label">Flow Rate</div><span class="card-val">0.1000</span><span class="card-unit">CFM</span></div></div>
 
 <div class="stats-strip">
-  <div class="stat-item"><span class="stat-k">Laser status</span><span class="stat-v ok">OK</span></div><div class="stat-item"><span class="stat-k">Flow status</span><span class="stat-v ok">OK</span></div><div class="stat-item"><span class="stat-k">Last sample</span><span class="stat-v">2026-06-04 14:11:41</span></div>
+  <div class="stat-item stat-narrow"><span class="stat-k">Laser status</span><span class="stat-v ok">OK</span></div>
+  <div class="stat-item stat-narrow"><span class="stat-k">Flow status</span><span class="stat-v ok">OK</span></div>
+  <div class="stat-item"><span class="stat-k">Last sample</span><span class="stat-v">2026-06-04 14:11:41</span></div>
+
   <div class="stat-item"><span class="stat-k">Samples in window</span><span class="stat-v" id="stat-n">--</span></div>
   <div class="stat-item"><span class="stat-k">0.3 <span class="u">&micro;m</span> &mdash; mean</span><span class="stat-v" id="stat-mean1">--</span></div>
   <div class="stat-item"><span class="stat-k">0.3 <span class="u">&micro;m</span> &mdash; peak</span><span class="stat-v" id="stat-peak1">--</span></div>
 
-  <div class="stat-item stat-wide"><span class="stat-k">ISO 8 exceedances &nbsp;(0.5 <span class="u">&micro;m</span> &gt; 3.52M <span class="u">/m&sup3;</span>)</span><span class="stat-v" id="stat-exc7">--</span></div>
+  <div class="stat-item stat-wide">
+  <span class="stat-k">ISO 8 exceedances &nbsp;(0.5 <span class="u">&micro;m</span> &gt; 3.52M <span class="u">/m&sup3;</span>)</span>
+  <span class="stat-v" id="stat-exc7">--</span>
+  </div>
 
   <div class="stat-item"><span class="stat-k">Offline gaps detected</span><span class="stat-v" id="stat-gaps">--</span></div>
 </div>
