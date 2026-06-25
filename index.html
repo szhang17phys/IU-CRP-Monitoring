@@ -27,8 +27,8 @@
     --text-primary:      #e6edf3;
     --text-secondary:    #8b949e;
     --text-accent:       #58a6ff;
-    --accent-yale:       #00356b;
-    --accent-yale-light: #286dc0;
+    --accent-iu:         #990000;
+    --accent-iu-light:   #B31B1B;
     --status-ok:         #3fb950;
     --status-warn:       #db6d28;
     --status-fault:      #f85149;
@@ -42,13 +42,13 @@
     --bg-primary:        #f6f8fa;
     --bg-card:           #ffffff;
     --bg-card-alt:       #f0f3f6;
-    --bg-header:         #00356b;
+    --bg-header:         #990000;
     --border-color:      #d0d7de;
     --text-primary:      #1f2328;
     --text-secondary:    #656d76;
     --text-accent:       #0969da;
-    --accent-yale:       #00356b;
-    --accent-yale-light: #286dc0;
+    --accent-iu:         #990000;
+    --accent-iu-light:  #B31B1B;
     --status-ok:         #1a7f37;
     --status-warn:       #bc4c00;
     --status-fault:      #cf222e;
@@ -71,11 +71,11 @@
   ::-webkit-scrollbar-track { background: var(--bg-primary); }
   ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
-  /* ── header bar — Yale Blue in BOTH themes, white serif title ─────────── */
+  /* ── header bar — iu Crimson in BOTH themes, white serif title ─────────── */
   .header {
-    background: var(--accent-yale);
+    background: var(--accent-iu);
     margin: -20px -28px 16px;
-    padding: 10px 28px;
+    padding: 18px 28px;
     display: flex; align-items: center; justify-content: space-between;
     gap: 14px; flex-wrap: wrap;
     border-bottom: 1px solid var(--border-color);
@@ -148,7 +148,7 @@
     font-family: inherit; cursor: pointer; min-width: 180px;
     transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
   }
-  select:focus { outline: none; border-color: var(--accent-yale-light); }
+  select:focus { outline: none; border-color: var(--accent-iu-light); }
   .updated { font-size: 11px; color: var(--text-secondary); align-self: flex-end; padding-bottom: 6px; }
   /* ── status indicator classes (Part 6) ────────────────────────────────── */
   .status-ok    { color: var(--status-ok); }
@@ -219,7 +219,7 @@
     text-transform: uppercase; padding: 5px 14px; cursor: pointer; white-space: nowrap;
     transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
   }
-  .notif-btn:hover { border-color: var(--accent-yale-light); color: var(--text-accent); }
+  .notif-btn:hover { border-color: var(--accent-iu-light); color: var(--text-accent); }
   .notif-drop {
     display: none; position: absolute; right: 0; top: calc(100% + 6px);
     min-width: 340px; max-width: 440px;
@@ -280,8 +280,8 @@
 
 <div class="header">
   <div class="header-text">
-    <h1>DUNE CRP ASSEMBLY SITE DASHBOARD</h1>
-    <div class="sub">Particulate &amp; Environmental Monitor<span class="sub-sep">&middot;</span>Particles Plus 7301<span class="sub-sep">&middot;</span>CRP Assembly Tent</div>
+    <h1>IU CRP ASSEMBLY SITE DASHBOARD</h1>
+    <div class="sub">Particulate &amp; Environmental Monitor<span class="sub-sep">&middot;</span>Particles Plus 7301 (tbd)<span class="sub-sep">&middot;</span>IU CRP Factory</div>
   </div>
   <div class="controls">
     <div class="ctrl-group">
@@ -1077,7 +1077,7 @@ function _attachRefreshControl() {
       'width:24px;height:24px;background:var(--bg-card);border:1px solid var(--border-color);border-radius:5px;' +
       'color:var(--text-primary);cursor:pointer;padding:0;' +
       'transition:border-color .15s,color .15s,transform .15s,box-shadow .15s,background .15s}' +
-    '.wlc-refresh-btn:hover{background:var(--bg-card-alt);border-color:var(--accent-yale-light);' +
+    '.wlc-refresh-btn:hover{background:var(--bg-card-alt);border-color:var(--accent-iu-light);' +
       'transform:rotate(-40deg);box-shadow:0 0 0 1px rgba(40,109,192,.35),0 0 12px rgba(40,109,192,.2)}' +
     '.wlc-refresh-btn:active{transform:scale(.92)}' +
     '.wlc-refresh-btn svg{width:14px;height:14px;display:block}' +
