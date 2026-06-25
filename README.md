@@ -8,6 +8,8 @@ Data are acquired from a **Particles Plus Model 7301** optical particle counter 
 
 **Live dashboard:** https://rohit-raut.github.io/WLC-High-Bay-Monitoring/
 
+[Shu] **Updated live dashboard:** https://szhang17phys.github.io/IU-CRP-Monitoring/
+
 ---
 
 ## 🚀 Quick Start (New Installations)

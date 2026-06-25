@@ -14,7 +14,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
 <meta http-equiv="refresh" content="1800">
-<title>DUNE CRP Assembly Site Dashboard</title>
+<title>IU CRP ASSEMBLY SITE DASHBOARD</title>
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 <style>
   /* ── theme variables — dark (default) ─────────────────────────────────── */
@@ -74,13 +74,33 @@
   /* ── header bar — iu Crimson in BOTH themes, white serif title ─────────── */
   .header {
     background: var(--accent-iu);
-    margin: -20px -28px 16px;
-    padding: 18px 28px;
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 14px; flex-wrap: wrap;
+    /* Extend to the edges of the page */
+    margin: -20px -28px 20px;
+    /* Make the header taller */
+    padding: 22px 36px;
+    min-height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    /* More space between title and controls */
+    gap: 20px;
+    flex-wrap: wrap;
     border-bottom: 1px solid var(--border-color);
     transition: border-color 0.2s ease;
   }
+
+  .iu-logo {
+    height: 64px;
+    width: auto;
+    margin-right: 18px;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
   .header h1 {
     color: #ffffff;
     font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
@@ -279,21 +299,34 @@
 
 
 <div class="header">
-  <div class="header-text">
-    <h1>IU CRP ASSEMBLY SITE DASHBOARD</h1>
-    <div class="sub">Particulate &amp; Environmental Monitor<span class="sub-sep">&middot;</span>Particles Plus 7301 (tbd)<span class="sub-sep">&middot;</span>IU CRP Factory</div>
-  </div>
+  <div class="header-left">
+    <img src="iu_logo.png" alt="Indiana University" class="iu-logo">
+
+    <div class="header-text">
+      <h1>IU CRP ASSEMBLY SITE DASHBOARD</h1>
+  
+      <div class="sub">Particulate &amp; Environmental Monitor<span class="sub-sep">&middot;</span>Particles Plus 7301 (TBD)<span class="sub-sep">&middot;</span>IU CRP Factory</div>
+    
+    </div>
+
+  </div> 
+ 
   <div class="controls">
     <div class="ctrl-group">
       <label>Time Range</label>
       <select id="sel-range" onchange="filterAndRender()"><option value="30">Last 30 min</option><option value="60">Last 1 hr</option><option value="120">Last 2 hr</option><option value="180">Last 3 hr</option><option value="360">Last 6 hr</option><option value="720">Last 12 hr</option><option value="1440" selected>Last 24 hr</option><option value="2880">Last 2 days</option><option value="4320">Last 3 days</option><option value="10080">Last 7 days</option></select>
     </div>
+
     <div class="updated">Last Data Updated: 2026-06-25 09:26:08</div>
+
     <div class="notif-wrap"><button class="notif-btn" onclick="document.getElementById('notif-drop').classList.toggle('open')">⊙ ALERTS <span class="status-fault">&#9679;</span></button><div class="notif-drop" id="notif-drop"><div class="notif-hdr">⊙ SYSTEM STATUS</div><div class="notif-row ni-alert">● Last sample: 2026-06-04 14:11:41 (20 day(s) ago)</div><div class="notif-row ni-warn">▲ ISO class: ISO 8 — at the ISO 8 target limit</div><div class="notif-row ni-warn">▲ ≥0.5µm 1,066,277/m³ — above ISO 7 (352 000), nearing ISO 8 limit</div><div class="notif-row ni-alert">▲ ≥0.3µm 23,356,428/m³ — exceeds ISO 8 equiv. (10 200 000)</div><div class="notif-row ni-ok">● Laser: OK</div><div class="notif-row ni-ok">● Flow sensor: OK</div><div class="notif-row ni-ok">● RH 38% — nominal</div><div class="notif-row ni-ok">● Temp 25.0°C / 77°F — nominal</div><div class="notif-row ni-mute">○ No alerts emailed in last 24 hr</div></div></div>
+
     <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">
       <span class="tt-light">&#9728;&nbsp; Light</span><span class="tt-dark">&#9790;&nbsp; Dark</span>
     </button>
+
   </div>
+
 </div>
 
 
