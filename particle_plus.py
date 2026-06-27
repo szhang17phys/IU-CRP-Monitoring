@@ -748,15 +748,20 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
     # stats strip to save vertical space on the lab TV). Temp/RH flags were
     # dropped — their live values are status-colored cards already, and the
     # flow VALUE is a card too (only its OK/FAULT flag lives here).
-    def _flag_stat(label, ok):
-        cls = '' if ok is None else (' ok' if ok else ' alert')
-        txt = '&mdash;' if ok is None else ('OK' if ok else 'FAULT')
-        return (f'<div class="stat-item"><span class="stat-k">{label}</span>'
-                f'<span class="stat-v{cls}">{txt}</span></div>')
+    def _flag_stat(label, ok, extra_cls=''):
+        cls = 'ok' if ok else 'alert'
+        txt = 'OK' if ok else 'FAULT'
+        extra = f' {extra_cls}' if extra_cls else ''
+        return (
+            f'<div class="stat-item{extra}">'
+            f'<span class="stat-k">{label}</span>'
+            f'<span class="stat-v {cls}">{txt}</span>'
+            f'</div>'
+        )
 
     flag_stats_html = (
-        _flag_stat('Laser status', laser_ok) +
-        _flag_stat('Flow status',  flow_ok)  +
+        _flag_stat('Laser status', laser_ok, extra_cls='stat-narrow') +
+        _flag_stat('Flow status',  flow_ok,  extra_cls='stat-narrow') +
         f'<div class="stat-item"><span class="stat-k">Last sample</span>'
         f'<span class="stat-v">{last_ts}</span></div>'
     )
@@ -1236,7 +1241,7 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
 <meta http-equiv="refresh" content="1800">
-<title>DUNE CRP Assembly Site {'Slow Control' if local else 'Dashboard'}</title>
+<title>IU CRP Assembly Site {'Slow Control' if local else 'Dashboard'}</title>
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 <style>
   /* ── theme variables — dark (default) ─────────────────────────────────── */
@@ -1249,8 +1254,8 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
     --text-primary:      #e6edf3;
     --text-secondary:    #8b949e;
     --text-accent:       #58a6ff;
-    --accent-yale:       #00356b;
-    --accent-yale-light: #286dc0;
+    --accent-iu:         #990000;
+    --accent-iu-light:   #B31B1B;
     --status-ok:         #3fb950;
     --status-warn:       #db6d28;
     --status-fault:      #f85149;
@@ -1264,13 +1269,13 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
     --bg-primary:        #f6f8fa;
     --bg-card:           #ffffff;
     --bg-card-alt:       #f0f3f6;
-    --bg-header:         #00356b;
+    --bg-header:         #990000;
     --border-color:      #d0d7de;
     --text-primary:      #1f2328;
     --text-secondary:    #656d76;
     --text-accent:       #0969da;
-    --accent-yale:       #00356b;
-    --accent-yale-light: #286dc0;
+    --accent-iu:         #990000;
+    --accent-iu-light:   #B31B1B;
     --status-ok:         #1a7f37;
     --status-warn:       #bc4c00;
     --status-fault:      #cf222e;
@@ -1293,37 +1298,57 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
   ::-webkit-scrollbar-track {{ background: var(--bg-primary); }}
   ::-webkit-scrollbar-thumb {{ background: var(--border-color); border-radius: 4px; }}
   ::-webkit-scrollbar-thumb:hover {{ background: var(--text-secondary); }}
-  /* ── header bar — Yale Blue in BOTH themes, white serif title ─────────── */
+  /* ── header bar — IU Crimson in BOTH themes ───────────────────────────── */
   .header {{
-    background: var(--accent-yale);
+    background: var(--accent-iu);
     margin: -20px -28px 16px;
-    padding: 10px 28px;
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 14px; flex-wrap: wrap;
+    padding: 12px 36px 12px 16px;
+    min-height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
     border-bottom: 1px solid var(--border-color);
     transition: border-color 0.2s ease;
   }}
+
+  .iu-logo {{
+    height: 80px;
+    width: auto;
+    flex-shrink: 0;
+  }}
+
+  .header-left {{
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }}
+
   .header h1 {{
     color: #ffffff;
     font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
-    font-size: 18px;
+    font-size: 30px;
     letter-spacing: 0.1em;
-    font-weight: normal;
-    margin-bottom: 3px;
-    line-height: 1.25;
+    font-weight: 600;
+    margin-bottom: 5px;
+    line-height: 1.15;
   }}
+
   .header .sub {{
-    color: rgba(255,255,255,0.78);
+    color: rgba(255,255,255,0.85);
     font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
     font-style: italic;
-    font-size: 11.5px;
+    font-size: 18px;
     letter-spacing: 0.06em;
   }}
+
   .header .sub .sub-sep {{
     color: rgba(255,255,255,0.45);
     font-style: normal;
     margin: 0 10px;
   }}
+
   /* badge shown only on the noether-local full-history dashboard */
   .local-badge {{
     display: inline-block; vertical-align: middle; margin-left: 14px;
@@ -1354,13 +1379,13 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
     flex-wrap: wrap; margin-bottom: 14px;
   }}
   /* controls cluster lives inside the blue header — labels/text go light */
-  .header .controls {{ margin-bottom: 0; gap: 12px; justify-content: flex-end; }}
+  .header .controls {{ margin-bottom: 0; gap: 9px; justify-content: flex-end; align-items: center; }}
   .header .ctrl-group label {{ color: rgba(255,255,255,0.75); }}
   .header .controls select {{ min-width: 0; }}
-  .header .updated {{ color: rgba(255,255,255,0.85); }}
+  .header .updated {{ color: rgba(255,255,255,0.85); font-size: 22px; font-weight: 600; display: flex; align-items: center; }}
   .header .theme-toggle {{ align-self: flex-end; margin-bottom: 2px; }}
   .ctrl-group label {{
-    display: block; font-size: 10px; color: var(--text-secondary);
+    display: block; font-size: 14px; color: var(--text-secondary);
     letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px;
   }}
   select {{
@@ -1370,7 +1395,7 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
     font-family: inherit; cursor: pointer; min-width: 180px;
     transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
   }}
-  select:focus {{ outline: none; border-color: var(--accent-yale-light); }}
+  select:focus {{ outline: none; border-color: var(--accent-iu-light); }}
   .updated {{ font-size: 11px; color: var(--text-secondary); align-self: flex-end; padding-bottom: 6px; }}
   /* ── status indicator classes (Part 6) ────────────────────────────────── */
   .status-ok    {{ color: var(--status-ok); }}
@@ -1395,11 +1420,11 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
     border-radius: 7px; padding: 10px 14px;
   }}
   .card .card-label {{
-    font-size: 10px; color: var(--text-secondary); text-transform: uppercase;
+    font-size: 14px; color: var(--text-secondary); text-transform: uppercase;
     letter-spacing: 1.2px; margin-bottom: 6px;
   }}
-  .card .card-val {{ font-size: 22px; font-weight: bold; line-height: 1; }}
-  .card .card-unit {{ font-size: 12px; color: var(--text-secondary); margin-left: 3px; }}
+  .card .card-val {{ font-size: 26px; font-weight: bold; line-height: 1; }}
+  .card .card-unit {{ font-size: 14px; color: var(--text-secondary); margin-left: 3px; }}
   /* big ISO class indicator at the right of the counts/m³ row — the soft
      glow takes the current status color (green / orange / red) */
   .cards .iso-card {{
@@ -1410,14 +1435,14 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
   }}
   .cards .iso-card .card-label {{ color: var(--text-secondary); }}
   .cards .iso-card .iso-card-val {{
-    font-size: 24px; font-weight: bold; letter-spacing: 2px; line-height: 1;
+    font-size: 28px; font-weight: bold; letter-spacing: 2px; line-height: 1;
     text-shadow: 0 0 14px color-mix(in srgb, currentColor 55%, transparent);
   }}
   .chart-panel {{
     border-radius: 8px; padding: 14px 14px 6px; margin-bottom: 12px;
   }}
   .chart-title {{
-    font-size: 10px; color: var(--text-secondary); text-transform: uppercase;
+    font-size: 14px; color: var(--text-secondary); text-transform: uppercase;
     letter-spacing: 1.5px; margin-bottom: 6px;
   }}
   .row2 {{ display: flex; gap: 12px; margin-bottom: 12px; }}
@@ -1428,24 +1453,38 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
     border-radius: 7px; padding: 8px 18px;
     margin-bottom: 12px; font-size: 11px;
   }}
-  .stat-item {{ flex: 1; min-width: 110px; padding: 3px 12px 3px 0; }}
-  .stat-k {{ color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.8px; display: block; font-size: 9px; }}
-  .stat-v {{ color: var(--text-accent); font-weight: bold; font-size: 12px; }}
+  .stat-item {{ flex: 1.0; min-width: 110px; padding: 6px 12px 6px 0; }}
+  .stat-narrow {{flex: 0.7; min-width: 80px;}}
+  .stat-wide {{flex: 1.8; min-width: 80px;}}
+  .stat-k {{ color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.9px; display: block; font-size:14px; white-space: nowrap; }}
+  .stat-v {{ color: var(--text-accent); font-weight: bold; font-size: 22px; }}
   .stat-v.ok {{ color: var(--status-ok); }}
   .stat-v.warn {{ color: var(--status-warn); }}
   .stat-v.alert {{ color: var(--status-fault); }}
   .notif-wrap {{ position: relative; align-self: center; margin-bottom: 0; }}
   .notif-btn {{
-    background: var(--bg-card); border: 2px solid var(--border-color); border-radius: 10px;
-    color: var(--text-secondary); font-family: inherit; font-size: 17px; font-weight: 600; letter-spacing: 1.5px;
-    text-transform: uppercase; padding: 9px 22px; cursor: pointer; white-space: nowrap;
+    background: var(--bg-card);
+    border: 2px solid var(--border-color);
+    border-radius: 9px;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    padding: 7px 16px;
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
   }}
-  .notif-btn:hover {{ border-color: var(--accent-yale-light); color: var(--text-accent); }}
+  .notif-btn:hover {{ border-color: var(--accent-iu-light); color: var(--text-accent); }}
 
   .notif-btn .status-fault,
   .notif-btn .status-warn,
-  .notif-btn .status-ok {{ font-size: 1.3em; margin-left: 8px; vertical-align: middle; }}
+  .notif-btn .status-ok {{ font-size: 1.45em; line-height: 1; margin-left: 2px; display: inline-flex; align-items: center; }}
 
   .notif-drop {{
     display: none; position: absolute; right: 0; top: calc(100% + 6px);
@@ -1507,7 +1546,7 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
 
 <div class="header">
   <div class="header-text">
-    <h1>DUNE CRP ASSEMBLY SITE {'SLOW CONTROL' if local else 'DASHBOARD'}{local_badge_html}</h1>
+    <h1>IU CRP ASSEMBLY SITE {'SLOW CONTROL' if local else 'DASHBOARD'}{local_badge_html}</h1>
     <div class="sub">Particulate &amp; Environmental Monitor<span class="sub-sep">&middot;</span>Particles Plus 7301<span class="sub-sep">&middot;</span>CRP Assembly Tent</div>
   </div>
   <div class="controls">
@@ -1532,7 +1571,7 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
   <div class="stat-item"><span class="stat-k">Samples in window</span><span class="stat-v" id="stat-n">--</span></div>
   <div class="stat-item"><span class="stat-k">0.3 <span class="u">&micro;m</span> &mdash; mean</span><span class="stat-v" id="stat-mean1">--</span></div>
   <div class="stat-item"><span class="stat-k">0.3 <span class="u">&micro;m</span> &mdash; peak</span><span class="stat-v" id="stat-peak1">--</span></div>
-  <div class="stat-item"><span class="stat-k">ISO 8 exceedances &nbsp;(0.5 <span class="u">&micro;m</span> &gt; 3.52M <span class="u">/m&sup3;</span>)</span><span class="stat-v" id="stat-exc7">--</span></div>
+  <div class="stat-item stat-wide"><span class="stat-k">ISO 8 exceedances &nbsp;(0.5 <span class="u">&micro;m</span> &gt; 3.52M <span class="u">/m&sup3;</span>)</span><span class="stat-v" id="stat-exc7">--</span></div>
   <div class="stat-item"><span class="stat-k">Offline gaps detected</span><span class="stat-v" id="stat-gaps">--</span></div>
 </div>
 
