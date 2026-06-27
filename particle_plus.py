@@ -1494,7 +1494,7 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
 
   .notif-btn .status-fault,
   .notif-btn .status-warn,
-  .notif-btn .status-ok {{ font-size: 30px; line-height: 0; margin-left: 3px; display: inline-flex; align-items: center; transform: translateY(-1px); }}
+  .notif-btn .status-ok {{ font-size: 40px; line-height: 0; margin-left: 3px; display: inline-flex; align-items: center; transform: translateY(-1px); }}
 
   .notif-drop {{
     display: none; position: absolute; right: 0; top: calc(100% + 6px);
