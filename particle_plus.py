@@ -1382,7 +1382,14 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
   .header .controls {{ margin-bottom: 0; gap: 9px; justify-content: flex-end; align-items: center; }}
   .header .ctrl-group label {{ color: rgba(255,255,255,0.75); }}
   .header .controls select {{ min-width: 0; }}
-  .header .updated {{ color: rgba(255,255,255,0.85); font-size: 22px; font-weight: 600; display: flex; align-items: center; }}
+  .header .updated {{
+  color: rgba(255,255,255,0.88);
+  font-size: 18px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  padding-bottom: 0;
+}}
   .header .theme-toggle {{ align-self: flex-end; margin-bottom: 2px; }}
   .ctrl-group label {{
     display: block; font-size: 14px; color: var(--text-secondary);
@@ -1468,11 +1475,11 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
     border-radius: 9px;
     color: var(--text-secondary);
     font-family: inherit;
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 600;
-    letter-spacing: 1.4px;
+    letter-spacing: 1.5px;
     text-transform: uppercase;
-    padding: 7px 16px;
+    padding: 6px 16px;
     cursor: pointer;
     white-space: nowrap;
     display: inline-flex;
@@ -1480,11 +1487,12 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
     gap: 8px;
     transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
   }}
+
   .notif-btn:hover {{ border-color: var(--accent-iu-light); color: var(--text-accent); }}
 
   .notif-btn .status-fault,
   .notif-btn .status-warn,
-  .notif-btn .status-ok {{ font-size: 1.45em; line-height: 1; margin-left: 2px; display: inline-flex; align-items: center; }}
+  .notif-btn .status-ok {{ font-size: 1.45em; line-height: 1; margin-left: 4px; display: inline-flex; align-items: center; }}
 
   .notif-drop {{
     display: none; position: absolute; right: 0; top: calc(100% + 6px);
@@ -1545,10 +1553,15 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
 {custom_range_modal_html}
 
 <div class="header">
-  <div class="header-text">
-    <h1>IU CRP ASSEMBLY SITE {'SLOW CONTROL' if local else 'DASHBOARD'}{local_badge_html}</h1>
-    <div class="sub">Particulate &amp; Environmental Monitor<span class="sub-sep">&middot;</span>Particles Plus 7301<span class="sub-sep">&middot;</span>CRP Assembly Tent</div>
+  <div class="header-left">
+    <img src="iu_logo.png" class="iu-logo">
+
+    <div class="header-text">
+      <h1>IU CRP ASSEMBLY SITE {'SLOW CONTROL' if local else 'DASHBOARD'}{local_badge_html}</h1>
+      <div class="sub">Particulate &amp; Environmental Monitor<span class="sub-sep">&middot;</span>Particles Plus 7301 (TBD)<span class="sub-sep">&middot;</span>IU CRP Factory</div>
+    </div>
   </div>
+
   <div class="controls">
     <div class="ctrl-group">
       <label>Time Range</label>
