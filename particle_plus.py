@@ -1196,17 +1196,29 @@ def generate_dashboard_html(csv_path, output_path, days=30, env_days=8,
     # the room is actually at ISO 8, not by per-channel equivalents.
     def _count_card(label, conc, cls):
         val = f'{conc:,.0f}' if conc is not None else '&mdash;'
-        return (f'<div class="card {cls}" style="border-top:3px solid currentColor">'
-                f'<div class="card-label">{label}</div>'
-                f'<span class="card-val">{val}</span>'
-                f'<span class="card-unit">counts / m&sup3;</span></div>')
+        return (
+            f'<div class="card {cls}" style="border-top:3px solid currentColor">'
+            f'<div class="card-label">{label}</div>'
+            f'<span class="card-val">{val}</span>'
+            f'<span class="card-unit">counts / m&sup3;</span>'
+            f'</div>'
+        )
 
     counts_cards_html = (
-        _count_card('&#8805;0.5 <span class="u">&micro;m</span>', _p05_now, _iso_cls) +
-        _count_card('&#8805;0.3 <span class="u">&micro;m</span>', _p_now,   _iso_cls) +
+        _count_card(
+            'Latest &#8805;0.5 <span class="u">&micro;m</span>',
+            _p05_now,
+            _iso_cls
+        ) +
+        _count_card(
+            'Latest &#8805;0.3 <span class="u">&micro;m</span>',
+            _p_now,
+            _iso_cls
+        ) +
         f'<div class="card iso-card {_iso_cls}">'
-        f'<div class="card-label">ISO 14644-1 Class</div>'
-        f'<span class="iso-card-val">{_iso_label}</span></div>'
+        f'<div class="card-label">Current ISO Class</div>'
+        f'<span class="iso-card-val">{_iso_label}</span>'
+        f'</div>'
     )
 
     # ── connection banner ─────────────────────────────────────────────────────
